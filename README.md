@@ -6,10 +6,10 @@ Heavy WIP !!!
 PRECONDITIONS
 
 - Uses imdisk to speed up building; depending on the Qt version and included options 8-12GB RAM is needed!
-...imdisk is available here: http://www.ltr-data.se/opencode.html/#ImDisk
+ ... imdisk is available here: http://www.ltr-data.se/opencode.html/#ImDisk
 - Can be configured to use other disks instead (what of course substantially slows down builindg).
 - Needs jom in the /bin folder of the base Qt installation.
-...jom is available here: https://download.qt.io/official_releases/jom/
+ ... jom is available here: https://download.qt.io/official_releases/jom/
 
 *** ATTENTION ***
 
@@ -31,7 +31,7 @@ HOW & WHAT
 
 1. A previously installed Qt version is cloned to a RAM disk volume (skipping unneeded parts)
 2. A target structure is created like: Drive:\...\Type[shared|static}\Platform[Win32\x64]\MsvcToolset[v100|v120|...}
-...means the $(PlatformToolset) and $(Platform) vars from MSVC can be used to target the correct libraries (i.e. for .props)
+ ... means the $(PlatformToolset) and $(Platform) vars from MSVC can be used to target the correct libraries (i.e. for .props)
 3. Depending on the required builds a matching environment is created for Qt configure and jom
 4. Qt "configure", "jom" and "jom clean" are executed; Qt configuration options are set from predefined lists.
 5. After a successful build, the result is copied int the newly created target folder (per build type)
