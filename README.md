@@ -5,11 +5,9 @@ Heavy WIP !!!
 
 PRECONDITIONS
 
-- Uses imdisk to speed up building; depending on the Qt version and included options 8-12GB RAM is needed!
- ... imdisk is available here: http://www.ltr-data.se/opencode.html/#ImDisk
+- Uses imdisk to speed up building; depending on the Qt version and included options 8-12GB RAM is needed! imdisk is available here: http://www.ltr-data.se/opencode.html/#ImDisk
 - Can be configured to use other disks instead (what of course substantially slows down builindg).
-- Needs jom in the /bin folder of the base Qt installation.
- ... jom is available here: https://download.qt.io/official_releases/jom/
+- Needs jom in the /bin folder of the base Qt installation. jom is available here: https://download.qt.io/official_releases/jom/
 
 *** ATTENTION ***
 
