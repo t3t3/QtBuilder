@@ -47,8 +47,8 @@ void QtBuilder::setup() /// primary setup for the current build run!!!
 	m_libPath = "E:/WORK/PROG/LIBS/Qt";			// ... target path for creating the misc libs subdirs; should be of course different from the qt install location!!!
 
 	m_msvcs << MSVC2013;						// << MSVC2010 << MSVC2012 << MSVC2013 << MSVC2015;
-	m_archs << X86<<X64;						// << X86 << X64;
-	m_types << Shared << Static;				// << Shared << Static;
+	m_archs << X86;						// << X86 << X64;
+	m_types << Static;				// << Shared << Static;
 }
 
 
@@ -552,6 +552,7 @@ bool QtBuilder::buildQt(int msvc, int arch, int type)
 		text = text.arg(m_version, type == Shared ?"shared":"static", arch==X86 ?"32":"64", makeSpec);
 		log("Building Qt ...", text.toUpper(), Warning);
 	}
+	if (QFileInfo(m_build+"/Makefile").exists())
 	{	log("Running jom confclean ...");
 
 		BuildProcess proc(this, env, true);
@@ -559,7 +560,10 @@ bool QtBuilder::buildQt(int msvc, int arch, int type)
 		proc.start("jom.exe");
 
 		if (!(result = proc.result()))
+		{
+			CALL_QUEUED(this, procError);
 			goto end;
+		}
 	}
 	{	log("Running configure ...");
 
@@ -594,7 +598,10 @@ bool QtBuilder::buildQt(int msvc, int arch, int type)
 		proc.start("jom.exe");
 
 		if (!(result = proc.result()))
+		{
+			CALL_QUEUED(this, procError);
 			goto end;
+		}
 	}
 
 	end:
