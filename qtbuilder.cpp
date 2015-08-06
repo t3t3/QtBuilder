@@ -24,7 +24,9 @@
 #include "qtbuilder.h"
 #include "helpers.h"
 #include <stdlib.h>
-
+#ifdef _WIN32
+#include "Windows.h"
+#endif
 #include <QApplication>
 #include <QPlastiqueStyle>
 #include <QVBoxLayout>
@@ -65,24 +67,13 @@ QtBuilder::QtBuilder(QWidget *parent) : QMainWindow(parent),
 
 QtBuilder::~QtBuilder()
 {
-	delete m_prc;
-	m_prc = NULL;
 }
 
 void QtBuilder::closeEvent(QCloseEvent *event)
 {
-	m_state = Finished;
-//	if (m_prc && m_prc->isOpen())
-//	{	m_prc->moveToThread(QThreadPool::globalInstance()->thread());
-//		m_prc->close();
-
-//		log("Process active", "waiting max. 5secs for process to end", Warning);
-//		m_prc->waitForFinished(5000);
-
-//		if (m_prc->isOpen())
-//			m_prc->kill();
-//	}
 	QMainWindow::closeEvent(event);
+	connect(m_prc, SIGNAL(destroyed()), qApp, SLOT(quit()), Qt::BlockingQueuedConnection);
+	m_state = Finished;
 }
 
 void QtBuilder::procError()
@@ -194,7 +185,7 @@ void QtBuilder::end()
 
 	QString msg = m_result ?
 		"<b>Process sucessfully completed.</b>" :
-		"<b>Process cancelled with errors!</b>" ;
+		"<b>Process ended with errors!</b>" ;
 
 	QString url("<br/><a href=\"file:///%1\">Open log file</a>");
 	msg +=  url.arg(QDir::toNativeSeparators(m_log->logFile()));
@@ -205,6 +196,36 @@ void QtBuilder::end()
 
 	m_log->add("QtBuilder ended with", QString(m_result ? "no %1" : "%1").arg("errors\r\n"), AppInfo);
 	close();
+}
+
+// ~~thread safe (no mutexes) ...
+void QtBuilder::endProcess()
+{
+	if (!m_prc->isOpen())
+		return;
+
+	log("Process active", "waiting max. 30secs for process to end", Warning);
+	CALL_QUEUED(this, disable);
+#ifdef _WIN32
+	GenerateConsoleCtrlEvent(0, (DWORD)m_prc->pid());
+	GenerateConsoleCtrlEvent(1, (DWORD)m_prc->pid());
+#endif
+	m_prc->terminate();
+	m_prc->waitForFinished(20000);
+
+	if (m_prc->state() == QProcess::Running)
+	{	m_prc->kill();
+		m_prc->waitForFinished(1000);
+		qDebug()<<"Qt kill running process";
+	}
+	if (m_prc->state() == QProcess::Running)
+	{
+		QProcess().execute(QString("taskkill /PID %1").arg((int)m_prc->pid()));
+		qDebug()<<"Win kill running process";
+		m_prc->close();
+	}
+	delete m_prc;
+	m_prc = NULL;
 }
 
 // ~~thread safe (no mutexes) ...
@@ -247,8 +268,12 @@ void QtBuilder::loop()
 		}	break;
 
 		case CopyTarget:
+		{	if(!(m_result = copyTarget(true)))
+				 m_state  = Finished;
+		}	break;
+
 		case CopySource:
-		{	if(!(m_result = copyTarget()))
+		{	if(!(m_result = copyTarget(false)))
 				 m_state  = Finished;
 		}	break;
 
@@ -268,14 +293,7 @@ void QtBuilder::loop()
 	}
 
 	end:
-	if (m_prc->isOpen())
-	{
-		log("Process active", "waiting max. 30secs for process to end", Warning);
-		m_prc->waitForFinished();
-	}
-	if (m_prc->isOpen())
-		m_prc->kill();
-
+	endProcess();
 	m_result = removeTemp();
 }
 
@@ -414,7 +432,7 @@ bool QtBuilder::createTarget()
 }
 
 // ~~thread safe (no mutexes) ...
-bool QtBuilder::copyTarget()
+bool QtBuilder::copyTarget(bool removeBuiltLibs)
 {
 	QString native = QDir::toNativeSeparators(m_target);
 	log("Build step", QString("Copying files to target folder: %1").arg(native), AppInfo);
@@ -441,6 +459,10 @@ bool QtBuilder::copyTarget()
 
 	emit newCopyCount();
 	log("Total files copied", QString::number(count));
+
+	if (removeBuiltLibs)
+		removeDir(m_build+"/lib");
+
 	return result;
 }
 

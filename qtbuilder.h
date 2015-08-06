@@ -118,15 +118,15 @@ protected:
 	bool cleanTemp();
 	bool clearTarget(int msvc, int arch, int type);
 	bool copyTemp();
-	bool copyTarget();
+	bool copyTarget(bool removeBuiltLibs);
 	bool removeTemp();
 	bool checkSource();
 
 	bool buildQt(int msvc, int arch, int type);
-	void registerQtVersion();
 	bool setEnvironment(QProcessEnvironment &env, const QString &vcVars, const QString &mkSpec);
 	void writeQtVars(const QString &path, const QString &vcVars, int msvc);
 	bool writeTextFile(const QString &filePath, const QString &text);
+	void registerQtVersion();
 
 	bool checkDir(int which);
 	bool checkDir(int which, int &result, QString &path, QString &name);
@@ -136,6 +136,7 @@ protected:
 	bool removeImdisk(bool silent, bool force);
 
 	void loop();
+	void endProcess();
 	void closeEvent(QCloseEvent *event);
 
 	int copyFolder(const QString &source,  const QString &target);
