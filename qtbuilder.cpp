@@ -46,17 +46,16 @@ void QtBuilder::setup() /// primary setup for the current build run!!!
 	m_version = "4.8.7";						// ... source version for the current run; needs a valid install of an according msvc qt setup - stays unmodified!!!
 	m_libPath = "E:/WORK/PROG/LIBS/Qt";			// ... target path for creating the misc libs subdirs; should be of course different from the qt install location!!!
 
-	m_msvcs << MSVC2010;						// << MSVC2010 << MSVC2012 << MSVC2013 << MSVC2015;
+	m_msvcs << MSVC2013;						// << MSVC2010 << MSVC2012 << MSVC2013 << MSVC2015;
 	m_archs << X86<<X64;						// << X86 << X64;
-	m_types << Static;							// << Shared << Static;
+	m_types << Shared << Static;				// << Shared << Static;
 }
 
 
 
 QtBuilder::QtBuilder(QWidget *parent) : QMainWindow(parent),
-	m_log(NULL), m_prg(NULL), m_prc(NULL), m_diskSpace(0),
-	m_cancelled(false), m_result(true),
-	m_building(false), m_state(Start)
+	m_log(NULL), m_prg(NULL), m_prc(NULL), m_diskSpace(0), m_state(Start),
+	m_building(false), m_cancelled(false), m_result(true), m_imdiskUnit(imdiskUnit)
 {
 	createUi();
 
@@ -88,7 +87,7 @@ void QtBuilder::closeEvent(QCloseEvent *event)
 
 void QtBuilder::procError()
 {
-	QString text = AppLog::clean(m_prc->readAllStandardError(), true);
+	QString text = AppLog::clean(stdErr(), true);
 	if (text.length() > 12)
 		m_log->add("Process message", text, Elevated);
 }
@@ -106,11 +105,11 @@ void QtBuilder::procOutput()
 			 m_spc->setMaximum(total);
 		}	 m_spc->setValue(m_diskSpace);
 
-		m_jom->append(AppLog::clean(m_prc->readAllStandardOutput()), m_build);
+		m_jom->append(AppLog::clean(stdOut()), m_build);
 	}
 	else
 	{
-		QString text = AppLog::clean(m_prc->readAllStandardOutput(), true);
+		QString text = AppLog::clean(stdOut(), true);
 		if (text.length() > 12)
 			m_log->add("Process info", text, Informal);
 	}
@@ -156,7 +155,7 @@ const QString QtBuilder::driveLetter()
 }
 
 // ~~thread safe (no mutexes) ...
-bool QtBuilder::qtSettings(QString &versions, QString &instDir)
+bool QtBuilder::qtSettings(QStringList &versions, QString &instDir)
 {
 	if (m_version.isEmpty())
 	{
@@ -164,7 +163,8 @@ bool QtBuilder::qtSettings(QString &versions, QString &instDir)
 		return false;
 	}
 
-	versions = "HKEY_CURRENT_USER\\Software\\Trolltech\\Versions\\%1";
+	versions+= "HKEY_CURRENT_USER\\Software\\Trolltech\\Versions\\%1";
+	versions+= "HKEY_CURRENT_USER\\Software\\Digia\\Versions\\%1";
 	instDir  = "InstallDir";
 	return true;
 }
@@ -270,8 +270,8 @@ void QtBuilder::loop()
 	end:
 	if (m_prc->isOpen())
 	{
-		log("Process active", "waiting max. 15secs for process to end", Warning);
-		m_prc->waitForFinished(15000);
+		log("Process active", "waiting max. 30secs for process to end", Warning);
+		m_prc->waitForFinished();
 	}
 	if (m_prc->isOpen())
 		m_prc->kill();
@@ -328,8 +328,8 @@ bool QtBuilder::createTemp()
 		return false;
 	}
 
-	removeImDisk(true, true);
-	if (!attachImDisk(drive))
+//	removeImDisk(true, true);
+	if (!attachImdisk(drive))
 	{
 		log("Could not create RAM disk", QDir::toNativeSeparators(m_btemp), Critical);
 		return false;
@@ -403,12 +403,7 @@ bool QtBuilder::createTarget()
 		log("Target directory created", native);
 		log("Activating file compression", native, Warning);
 
-		m_prc->setNativeArguments(QString("/c /i %1").arg(native));
-		m_prc->start("compact");
-		m_prc->waitForFinished(-1);
-		m_prc->close();
-
-		log("File compression completed");
+		InlineProcess(this, "compact.exe", QString("/c /i %1").arg(native));
 	}
 	else
 	{
@@ -618,27 +613,30 @@ bool QtBuilder::buildQt(int msvc, int arch, int type)
 // ~~thread safe (no mutexes) ...
 void QtBuilder::registerQtVersion()
 {
+	return; // a) not working, b) not usefual in particular for having Qt Creator showing the new versions
+
+	QStringList versions;
 	QString version, instDir;
-	if (!qtSettings(version, instDir))
+	if (!qtSettings(versions, instDir))
+		return;
+
+	FOR_CONST_IT(versions)
 	{
-		log("Could not register Qt in:", version.arg("\\\\").remove("\\\\\\"), Elevated);
-		return;
+		QString native = QDir::toNativeSeparators(m_target);
+		QString name = QString(m_target).remove(m_libPath+SLASH).replace(SLASH,"-");
+
+		  version = (*IT).arg(name);
+		QSettings s(version);
+		qDebug() << version;
+
+		if (s.isWritable())
+		{	s.setValue(instDir, native);
+			s.sync();
+		if (s.value(instDir).toString() == native)
+			return;
+		}
+		log("Could not register Qt in:", version+QString(": REG_SZ\"%1\"").arg(instDir), Elevated);
 	}
-
-	QString native = QDir::toNativeSeparators(m_target);
-	QString name = QString(m_target).remove(m_libPath+SLASH).replace(SLASH,"-");
-
-	  version = version.arg(name);
-	QSettings s(version);
-	qDebug() << version;
-
-	if (s.isWritable())
-	{	s.setValue(instDir, native);
-		s.sync();
-	if (s.value(instDir).toString() == native)
-		return;
-	}
-	log("Could not register Qt in:", version+QString(": REG_SZ\"%1\"").arg(instDir), Elevated);
 }
 
 // ~~thread safe (no mutexes) ...
@@ -691,7 +689,7 @@ bool QtBuilder::setEnvironment(QProcessEnvironment &env, const QString &vcVars, 
 	//	  (since they are used by cl.exe and link.exe)
 	//
 	QString key, value;
-	QStringList  parts = QString(m_prc->readAllStandardOutput()).split(anchor);
+	QStringList  parts = stdOut().split(anchor);
 	QStringList  lines = parts.last().split("\r\n");
 	FOR_CONST_IT(lines)
 	{
@@ -789,31 +787,38 @@ bool QtBuilder::removeTemp()
 		return true;
 
 	log("Build step", "Removing temp infrastructure", AppInfo);
-	return removeImDisk(false, false);
+	return removeImdisk(false, false);
 }
 
 // ~~thread safe (no mutexes) ...
 bool QtBuilder::checkSource()
 {
-	QString versions, instDir;
+	QStringList versions;
+	QString version, instDir;
 	if (!qtSettings(versions, instDir))
 		return false;
 
-	QSettings s(versions.arg(m_version), QSettings::NativeFormat);
-	QString dir = s.value(instDir).toString().trimmed();
-
-	if (!s.contains(instDir) || dir.isEmpty())
+	bool result = false;
+	FOR_CONST_IT(versions)
 	{
-		log("Could not find Qt install from:", versions.arg(m_version)+QString(": REG_SZ\"%1\"").arg(instDir), Elevated);
-		return false;
+		version = (*IT).arg(m_version);
+		QSettings s(version, QSettings::NativeFormat);
+		QString dir = s.value(instDir).toString().trimmed();
+		if ((result = s.contains(instDir) && !dir.isEmpty()))
+		{	QDir  d = QDir(dir);
+			if ( !d.exists())
+			{
+				log("Qt install path not on disk:", QDir::toNativeSeparators(m_source), Elevated);
+				return false;
+			}
+
+			m_source = d.absolutePath();
+			break;
+		}
 	}
-
-	QDir d = QDir(dir);
-	m_source = d.absolutePath();
-
-	if (!d.exists())
+	if (!result)
 	{
-		log("Qt install path not on disk:", QDir::toNativeSeparators(m_source), Elevated);
+		log("Could not find Qt install from:", version+QString(": REG_SZ\"%1\"").arg(instDir), Elevated);
 		return false;
 	}
 	return true;
@@ -898,44 +903,57 @@ bool QtBuilder::checkDir(int which, int &count)
 }
 
 // ~~thread safe (no mutexes) ...
-bool QtBuilder::attachImDisk(const QString &letter)
+bool QtBuilder::attachImdisk(QString &letter)
 {
 	if (!qtBuilderStaticDrive.isEmpty())
 		return true;
 
+	QString out;
+	{	InlineProcess p(this, "imdisk.exe", "-l -n", true);
+		out = stdOut();
+	}
+	if (out.contains(QString::number(m_imdiskUnit)))
+	{
+		InlineProcess p(this, "imdisk.exe", QString("-l -u %1").arg(m_imdiskUnit), true);
+		QString inf = stdOut();
+		if (inf.contains(imdiskLetter))
+		{	//
+			// TODO: in this case it would also be needed to extend the disk if needed
+			//
+			letter	 = getValueFrom(inf, imdiskLetter, "\n");
+			int size = getValueFrom(inf, imdiskSizeSt, " ").toULongLong() /1024 /1024 /1024;
+			log("Using existing RAM disk", QString("Drive letter %1, %2GB").arg(letter).arg(size));
+			return true;
+		}
+		else while(out.contains(QString::number(m_imdiskUnit)))
+		{
+			m_imdiskUnit++;
+		}
+	}
+
 	log("Trying to attach RAM disk", QString("Drive letter %1, %2GB").arg(letter).arg(qtBuilderRamDiskInGB));
 
 	QString args = QString("-a -m %1: -u %2 -s %3G -o rem -p \"/fs:ntfs /q /y\"");
-	args  = args.arg(letter).arg(imDiskUnit).arg(qtBuilderRamDiskInGB);
+	args  = args.arg(letter).arg(m_imdiskUnit).arg(qtBuilderRamDiskInGB);
 
-	m_prc->setNativeArguments(args);
-	m_prc->start("imdisk");
-	m_prc->waitForFinished(-1);
-	m_prc->close();
-
-	return m_prc->exitCode() == QProcess::NormalExit;
+	InlineProcess(this, "imdisk.exe", args, false);
+	return normalExit();
 }
 
 // ~~thread safe (no mutexes) ...
-bool QtBuilder::removeImDisk(bool silent, bool force)
+bool QtBuilder::removeImdisk(bool silent, bool force)
 {
 	if (!qtBuilderStaticDrive.isEmpty())
 		return true;
 
 	if (!silent)
-		 log("Trying to remove RAM disk");
-	else m_prc->blockSignals(true);
+		log("Trying to remove RAM disk");
 
 	QString args = QString("-%1 -u %2");
-	args  = args.arg(force ? "D" : "d").arg(imDiskUnit);
+	args  = args.arg(force ? "D" : "d").arg(m_imdiskUnit);
 
-	m_prc->setNativeArguments(args);
-	m_prc->start("imdisk");
-	m_prc->waitForFinished(-1);
-	m_prc->close();
-
-	if (silent) m_prc->blockSignals(false);
-	return m_prc->exitCode() == QProcess::NormalExit;
+	InlineProcess(this, "imdisk.exe", args, silent);
+	return normalExit();
 }
 
 // ~~thread safe (no mutexes) ...
@@ -1145,7 +1163,7 @@ void Progress::setMaximum(int max)
 
 const QString qtBuilderTableBody("<html><header><style>TD{padding:0px 6px;}</style></header><body style=font-size:11pt;font-family:Calibri;><table>");
 const QString qtBuilderTableLine("<tr><td style=font-size:10pt>%1</td><td><b style=color:%2>%3</b></td><td style=white-space:pre>%4</td></tr>");
-const QString qtBuilderTableHtml("</table><a name=\"end\"></body></html>");
+const QString qtBuilderTableHtml("</table><br/><a name=\"end\"></body></html>");
 const QString qtBuilderLogLine("%1\t%2\t%3\t%4\r\n");
 const QString qtBuilderBuildLogTabs = QString("\n")+QString("\t").repeated(10);
 
@@ -1178,7 +1196,7 @@ const QString AppLog::clean(QString text, bool extended)
 	QStringList t = text.split("\r\n", QString::SkipEmptyParts);
 				t+= text.split(  "\n", QString::SkipEmptyParts);
 
-	int i = t.count();
+	int count = t.count();
 	for(int i = 0; i < count; i++)
 	{
 		text = t[i].simplified();

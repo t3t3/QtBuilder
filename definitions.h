@@ -140,5 +140,7 @@ enum MessageType
 
 const QString build("_build"); // DON'T use a $ char in the temp folders as it WILL mess up qmake!!!
 const QString btemp("_btemp"); // DON'T use a $ char in the temp folders as it WILL mess up qmake!!!
-const int imDiskUnit = 16842 ;
+const QString imdiskLetter("Drive letter:");
+const QString imdiskSizeSt("Size:");
+const int imdiskUnit = 16841 ;
 #endif // DEFINITIONS_H

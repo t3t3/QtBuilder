@@ -68,3 +68,10 @@ bool getDiskSpace(const QString &anyPath, uint &totalMb, uint &freeMb)
 	#endif
 	return false;
 }
+
+const QString getValueFrom(const QString &string, const QString &inTag, const QString &outTag)
+{
+	if (string.contains(inTag) && string.contains(outTag))
+	return string.split(inTag, QString::SkipEmptyParts).last().split(outTag, QString::SkipEmptyParts).first().simplified();
+	return QString();
+}

@@ -87,5 +87,6 @@
 
 const QRect centerRect(int percentOfScreen, int screenNbr = -1);
 bool getDiskSpace(const QString &anyPath, uint &totalMb, uint &freeMb);
+const QString getValueFrom(const QString &string, const QString &inTag, const QString &outTag);
 
 #endif // HELPERS_H

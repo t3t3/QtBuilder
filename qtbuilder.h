@@ -86,8 +86,6 @@ class QtBuilder : public QMainWindow
 {
 	Q_OBJECT
 
-	friend class BuildProcess;
-
 signals:
 	void log(const QString &msg, const QString &text = QString(), int type = Informal);
 	void log(const QString &msg, int type);
@@ -134,8 +132,8 @@ protected:
 	bool checkDir(int which, int &result, QString &path, QString &name);
 	bool checkDir(int which, int &count);
 
-	bool attachImDisk(const QString &letter);
-	bool removeImDisk(bool silent, bool force);
+	bool attachImdisk(QString &letter);
+	bool removeImdisk(bool silent, bool force);
 
 	void loop();
 	void closeEvent(QCloseEvent *event);
@@ -148,7 +146,11 @@ protected:
 
 	const QString driveLetter();
 	const QString targetDir(int msvc, int arch, int type, QString &native);
-	bool qtSettings(QString &versions, QString &instDir);
+	bool qtSettings(QStringList &versions, QString &instDir);
+
+	bool normalExit() { return m_prc && m_prc->exitCode() ==  QProcess::NormalExit; }
+	QString stdOut()  { return m_prc  ? m_prc->readAllStandardOutput() : QString(); }
+	QString stdErr()  { return m_prc  ? m_prc->readAllStandardError()  : QString(); }
 
 private:
 	enum Dirs { Source, Target, Build, Temp, };
@@ -165,8 +167,8 @@ private:
 	};
 	QFutureWatcher<void> m_loop;
 	QProgressBar *m_spc;
-	Progress *m_prg;
 	QProcess *m_prc;
+	Progress *m_prg;
 	BuildLog *m_jom;
 	AppLog *m_log;
 	QString m_btemp;
@@ -183,73 +185,112 @@ private:
 	QList<int> m_archs;
 	QList<int> m_types;
 
+	uint m_imdiskUnit;
 	uint m_diskSpace;
 
 	volatile int  m_state;
 	volatile bool m_result;
 	volatile bool m_building;
 	volatile bool m_cancelled;
-};
 
-class BuildProcess
-{
-public:
-	explicit BuildProcess(QtBuilder *builder, const QProcessEnvironment &env, bool blockStdErrors = false)
-		: m_builder(NULL)
+
+	class InlineProcess
 	{
-		if (  builder->m_prc &&
-			! builder->m_building)
-		{	  builder->m_building = true;
-			m_builder = builder;
+	public:
+		explicit InlineProcess(QtBuilder *builder, const QString &prog, const QString &args, bool blockOutput = false)
+			: m_builder(builder), m_buildPrc(NULL), m_unblockOutput(false)
+		{
+			if (!m_builder || !(m_buildPrc = m_builder->m_prc))
+				return;
 
-			if (builder->m_prc)
-			{
-			if (blockStdErrors)
-				builder->m_prc->blockSignals(true);
+			if (	blockOutput)
+			{	m_unblockOutput = !m_buildPrc->signalsBlocked();
+				m_buildPrc->blockSignals(true);
+			}
+			{	m_buildPrc->setNativeArguments(args);
+				m_buildPrc->start(prog);
+				m_buildPrc->waitForFinished(-1);
+			}
+		}
+		virtual ~InlineProcess()
+		{
+			if (m_buildPrc)
+				m_buildPrc->close();
 
-				builder->m_prc->setWorkingDirectory(builder->m_build);
-				builder->m_prc->setNativeArguments(QString());
+			if (m_unblockOutput)
+				m_buildPrc->blockSignals(false);
+		}
 
+	private:
+		QtBuilder *m_builder;
+		QProcess *m_buildPrc;
+		bool m_unblockOutput;
+	};
+	class BuildProcess
+	{
+	public:
+		explicit BuildProcess(QtBuilder *builder, const QProcessEnvironment &env, bool blockOutput = false)
+			: m_builder(builder), m_buildPrc(NULL), m_unblockOutput(false), m_unsetBuilding(false)
+		{
+			if (!m_builder || !(m_buildPrc = m_builder->m_prc))
+				return;
+
+			if (!m_builder->m_building)
+			{	 m_builder->m_building = true;
+				 m_unsetBuilding = true;
+			}
+			if (	blockOutput)
+			{	m_unblockOutput = !m_buildPrc->signalsBlocked();
+				m_buildPrc->blockSignals(true);
+			}
+			{	m_buildPrc->setWorkingDirectory(m_builder->m_build);
+				m_buildPrc->setNativeArguments(QString());
+			}
 			if(!env.isEmpty())
-				builder->m_prc->setProcessEnvironment(env);
+				m_buildPrc->setProcessEnvironment(env);
+		}
+		virtual ~BuildProcess()
+		{
+			if (m_buildPrc)
+			{	m_buildPrc->close();
+
+			if (m_unsetBuilding)
+				m_builder->m_building = false;
+
+			if (m_unblockOutput)
+				m_buildPrc->blockSignals(false);
 			}
 		}
-	}
-	virtual ~BuildProcess()
-	{
-		if (m_builder)
-		{	m_builder->m_building = false;
-
-			if (m_builder->m_prc)
-			{	m_builder->m_prc->blockSignals(false);
-				m_builder->m_prc->close();;
-			}
+		inline void setArgs(const QString &args = QString())
+		{
+			if (m_buildPrc)
+				m_buildPrc->setNativeArguments(args);
 		}
-	}
-	inline void setArgs(const QString &args = QString())
-	{
-		if (m_builder)
-			m_builder->m_prc->setNativeArguments(args);
-	}
-	inline void start(const QString &app)
-	{
-		QDir::setCurrent(m_builder->m_build);
-		if (m_builder)
-			m_builder->m_prc->start(app);
-	}
-	inline bool result()
-	{
-		if (m_builder)
-		{	m_builder->m_prc->waitForFinished(-1);
+		inline void start(const QString &prog)
+		{
+			if (m_builder)
+				QDir::setCurrent(m_builder->m_build);
 
+			if (m_buildPrc)
+				m_buildPrc->start(prog);
+		}
+		inline bool result()
+		{
+			if (m_buildPrc)
+			{	m_buildPrc->waitForFinished(-1);
 			return
-			m_builder->m_prc->exitStatus() == QProcess::NormalExit;
+				m_builder->normalExit();
+			}
+			return false;
 		}
-		return false;
-	}
 
-private:
-	QtBuilder *m_builder;
+	private:
+		QtBuilder *m_builder;
+		QProcess *m_buildPrc;
+		bool m_unblockOutput;
+		bool m_unsetBuilding;
+	};
 };
+
 
 #endif // QTBUILDER_H
