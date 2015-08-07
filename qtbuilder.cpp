@@ -45,7 +45,7 @@ void QtBuilder::setup() /// primary setup for the current build run!!!
 
 	m_msvcs << MSVC2013;						// << MSVC2010 << MSVC2012 << MSVC2013 << MSVC2015;
 	m_archs << X86<<X64;						// << X86 << X64;
-	m_types << Shared;				// << Shared << Static;
+	m_types << Static;				// << Shared << Static;
 }
 
 
