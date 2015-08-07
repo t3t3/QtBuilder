@@ -5,7 +5,7 @@ Heavy WIP !!!
 
 PRECONDITIONS
 
-- Uses imdisk to speed up building; depending on the Qt version and included options 8-12GB RAM is needed! imdisk is available here: http://www.ltr-data.se/opencode.html/#ImDisk
+- Uses imdisk to speed up building; depending on the Qt version and included options 6-10GB RAM is needed! imdisk is available here: http://www.ltr-data.se/opencode.html/#ImDisk
 - Can be configured to use other disks instead (what of course substantially slows down builindg).
 - Needs jom in the /bin folder of the base Qt installation. jom is available here: https://download.qt.io/official_releases/jom/
 
@@ -22,7 +22,7 @@ IMPORTANT NOTES
 - As of now this is strictly tailored to my needs; Configuration needs to be done in code but is more or less easy to get.
 - Tailored for use with MSVC; the created targets can be easily used in Qt Creator though (by adding custom kits)
 - Currently only tested with Qt 4.8.7 (since i need to stay with Qt4 for my projects)
-- No code comments!
+- barely commented!
 - Might not work for you, or you and even you.
 
 HOW & WHAT
@@ -51,7 +51,8 @@ For now this is just "AS IS".
 
 CODE STATE
 
-... in testing; Code is about to follow as soon I have built a complete set of Qt libs for VS2010/2013 in all flavors and could compile all my projects with all of them, in VS as well as in Qt Creator.
+... still in testing
+... final builds may not work; in particular static builds
 
 SUPPORT
 
