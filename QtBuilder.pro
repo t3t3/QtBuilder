@@ -12,7 +12,10 @@ MOBILITY += systeminfo
 
 SOURCES += main.cpp \
 	qtbuilder.cpp \
-	helpers.cpp
+	helpers.cpp \
+    guitools.cpp \
+    buildsteps.cpp \
+    processes.cpp
 
 HEADERS += \
 	qtbuilder.h \

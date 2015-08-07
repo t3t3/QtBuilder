@@ -27,7 +27,18 @@
 #include <QStringList>
 #include <QRect>
 
-#define SLASH "/"
+typedef const char *const StringLiteral;
+
+const char	FMT_F = 'f'  ;
+const QChar FILLSPC(' ' );
+const QChar FILLNUL('0' );
+const QString SLASH("/" );
+const QString PLCHD("%1");
+const QString ___LF("\n");
+const QString __TAB("\t");
+const QString _CRLF("\r\n");
+
+const QString Q_SETTINGS_GEOMETRY("WindowGeometry");
 
 #define FOR_CONST_IT(OBJECT)											\
 	for (auto IT = OBJECT.constBegin(); IT != OBJECT.constEnd(); ++IT)	\
@@ -86,7 +97,14 @@
 #define MEMBER(NAME)									#NAME
 
 const QRect centerRect(int percentOfScreen, int screenNbr = -1);
-bool getDiskSpace(const QString &anyPath, uint &totalMb, uint &freeMb);
-const QString getValueFrom(const QString &string, const QString &inTag, const QString &outTag);
 
+bool getDiskSpace(const QString &anyPath, uint &totalMb, uint &freeMb);
+bool createSymlink(const QString &source, const QString &target, QString &error = QString());
+bool removeSymlink(const QString &target);
+bool unmountFolder(const QString &path, QString &error = QString());
+bool mountFolder(const QString &srcDrive, const QString &tgtPath, QString &error = QString());
+const QString getValueFrom(const QString &string, const QString &inTag, const QString &outTag);
+const QString getLastWinError();
+
+const qreal MBYTE = 1024*1024.0;
 #endif // HELPERS_H

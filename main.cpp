@@ -3,12 +3,16 @@
 
 int main(int argc, char *argv[])
 {
+	QCoreApplication::setOrganizationName("T3");
+	QCoreApplication::setOrganizationDomain("T3forWIN");
+	QCoreApplication::setApplicationName("QtBuilder");
+	QCoreApplication::setApplicationVersion("0.3.1.85");
+
 	QApplication a(argc, argv);
 	a.setQuitOnLastWindowClosed(false);
 
 	QtBuilder builder;
-	builder.exec();
-
-	int result = a.exec() + (int)!builder.result();
-	return result;
+	  builder.exec();
+			a.exec();
+	return	a.property("result").toInt();
 }

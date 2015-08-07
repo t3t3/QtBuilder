@@ -49,24 +49,104 @@ const QRect centerRect(int percentOfScreen, int screenNbr)
 }
 
 #ifdef _WIN32
-	#include "windows.h"
+#include "windows.h"
 #endif
-
 bool getDiskSpace(const QString &anyPath, uint &totalMb, uint &freeMb)
 {
-	#ifdef _WIN32
+#ifdef _WIN32
 	ULARGE_INTEGER free,total;
 	if (!GetDiskFreeSpaceExA(
-		 QDir::toNativeSeparators(anyPath).toUtf8().constData(), &free, &total, 0))
+		 QString(anyPath.left(2)+"\\").toUtf8().constData(), &free, &total, 0))
 		return false;
 
 	quint64 MB = quint64(1024*1024);
 	freeMb	= (uint)(( free.QuadPart) / MB);
 	totalMb = (uint)((total.QuadPart) / MB);
-
 	return true;
-	#endif
+#endif
 	return false;
+}
+
+bool unmountFolder(const QString &path, QString &error)
+{
+	QString dir = QDir::toNativeSeparators(QDir::cleanPath(path));
+#ifdef _WIN32
+	LPCWSTR lpszVolumeMountPoint = (LPCWSTR)dir.utf16();
+
+	if (DeleteVolumeMountPoint(lpszVolumeMountPoint) == NO_ERROR)
+		return true;
+#endif
+	error = getLastWinError();
+	return false;
+}
+
+bool mountFolder(const QString &srcDrive, const QString &tgtPath, QString &error)
+{
+	QString drv = QDir::cleanPath(srcDrive)+"\\";
+	QString nat = QDir::toNativeSeparators(tgtPath);
+#ifdef _WIN32
+	LPCWSTR lpszVolumeMountPoint = (LPCWSTR)drv.utf16();
+	LPWSTR  lpszVolumeName = '\0';
+
+	if (GetVolumeNameForVolumeMountPoint(lpszVolumeMountPoint, lpszVolumeName, 100) == NO_ERROR)
+	{
+		lpszVolumeMountPoint = (LPCWSTR)nat.utf16();
+		if (SetVolumeMountPoint(lpszVolumeMountPoint, lpszVolumeName) == NO_ERROR)
+			return true;
+	}
+#endif
+	error = getLastWinError();
+	return false;
+}
+
+bool createSymlink(const QString &source, const QString &target, QString &error)
+{
+	QString src = QDir::toNativeSeparators(QDir::cleanPath(source));
+	QString tgt = QDir::toNativeSeparators(QDir::cleanPath(target));
+#ifdef _WIN32
+	LPCWSTR lpSymlinkFileName = (LPCWSTR)tgt.utf16();
+	LPCWSTR lpTargetFileName  = (LPCWSTR)src.utf16();
+
+	if (CreateSymbolicLink(lpSymlinkFileName, lpTargetFileName, SYMBOLIC_LINK_FLAG_DIRECTORY))
+		return true;
+#endif
+	error = getLastWinError();
+	return false;
+}
+
+bool removeSymlink(const QString &target)
+{
+	QFileInfo fi(target);
+	if (!fi.exists())
+		return true;
+
+	if (fi.symLinkTarget().isEmpty())
+		return false;
+
+	if (fi.isDir())
+		return QDir().rmdir(target);
+
+	return QFile(target).remove();
+}
+
+const QString getLastWinError()
+{
+#ifdef _WIN32
+	DWORD msgId;
+	if (!(msgId = GetLastError()))
+		return QString();
+
+	qDebug()<<"WINDOWS ERROR:"<<msgId;
+
+	wchar_t buf[BUFSIZ];
+	 size_t size = FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(),
+		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, BUFSIZ, 0);
+
+	QString message = QString::fromWCharArray(buf, (int)size);
+	LocalFree(buf);
+	return	message;
+#endif
+	return QString();
 }
 
 const QString getValueFrom(const QString &string, const QString &inTag, const QString &outTag)

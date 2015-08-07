@@ -1,26 +1,24 @@
 #ifndef DEFINITIONS_H
 #define DEFINITIONS_H
 #include <QStringList>
-
+//
+// user config section...
+//
 const QString vc2010("D:/BIZ/MICROSOFT/Visual Studio 2010");
 const QString vc2012("D:/BIZ/MICROSOFT/Visual Studio 2012");
 const QString vc2013("D:/BIZ/MICROSOFT/Visual Studio 2013");
 const QString vc2015("D:/BIZ/MICROSOFT/Visual Studio 2015");
 
-const QString qtVars("/bin/qtvars.bat");
-
 const QStringList global = QStringList()	<<
 	"-confirm-license"						<<
 	"-opensource"							<<
-	"-arch windows"							<<
-	"-debug-and-release"					<<
+	"-release"								<<
 	"-ltcg"									<<
+	"-mp"									<<
 	"-mmx"									<<
-	"-3dnow"								<<
 	"-sse"									<<
 	"-sse2"									<<
-	"-fast"									<<
-	"-mp"									;
+	"-3dnow"								;
 
 const QStringList plugins = QStringList()	<<
 	"-qt-zlib"								<<
@@ -32,11 +30,8 @@ const QStringList plugins = QStringList()	<<
 	"-qt-style-windowsvista"				;
 
 const QStringList exclude = QStringList()	<<
-	"-nomake demos"							<<
-	"-nomake docs"							<<
-	"-nomake examples"						<<
-	"-no-dbus"								<<
 	"-no-accessibility"						<<
+	"-no-dbus"								<<
 	"-no-declarative"						<<
 	"-no-neon"								<<
 	"-no-openvg"							<<
@@ -46,36 +41,65 @@ const QStringList exclude = QStringList()	<<
 	"-no-qt3support"						<<
 	"-no-script"							<<
 	"-no-scripttools"						<<
-	"-no-webkit"							;
+	"-no-webkit"							<<
+	"-nomake demos"							<<
+	"-nomake docs"							<<
+	"-nomake examples"						<<
+	"-nomake tools"							<<
+	"-nomake translations"					;
+
+const QStringList sfilter = QStringList()	<<
+	"/demos"								<<
+	"/doc"									<<
+	"/examples"								; // all lower case!
+
+const QStringList tfilter = QStringList()	<<
+	"/activeqt"								<<
+	"/dbus"									<<
+	"/docs"									<<
+	"/generated"							<<
+	"/javascript"							<<
+	"/openvg"								<<
+	"/phonon"								<<
+	"/qdoc3"								<<
+	"/qt3support"							<<
+	"/scripttools"							<<
+	"/translations"							<<
+	"/util"									<<
+	"/webkit"								<<
+	"/config.profiles"						<<
+	"/config.tests"							<<
+	"/imports"								<<
+	"/tmp"									; // all lower case!
 
 const QStringList ffilter = QStringList()	<<
 	"dll"									<<
 	"lib"									<<
 	"pdb"									<<
-	"prl"									;
+	"prl"									; // all lower case!
 
-const QStringList sfilter = QStringList()	<<
-	"/dbus"									<<
-	"/demos"								<<
-	"/doc/"									<<
-	"/docs/"								<<
-	"/examples"								<<
-	"/javascript"							<<
-	"/phonon"								<<
-	"openvg/"								<<
-	"/qt3support/"							<<
-	"scripttools/"							<<
-	"webkit/"								;
+const QStringList cfilter = QStringList()	<<
+	"c"										<<
+	"cpp"									; // all lower case!
 
-const QStringList tfilter = QStringList()	<<
-	"/tmp"									<<
-	"/config.profiles"						<<
-	"/config.tests"							<<
-	"/translations"							<<
-	"/examples"								<<
-	"/imports"								<<
-	"/util"									;
-
+const QStringList targets = QStringList()	<<
+	"sub-tools-bootstrap"					<<
+	"sub-moc"								<<
+	"sub-rcc"								<<
+	"sub-uic"								<<
+	"sub-winmain"							<<
+	"sub-corelib"							<<
+	"sub-xml"								<<
+	"sub-network"							<<
+	"sub-sql"								<<
+	"sub-gui"								<<
+	"sub-idc"								<<
+	"sub-opengl"							<<
+	"sub-multimedia"						<<
+	"sub-plugins"							;
+//
+// persistent configs...
+//
 enum Modes
 {
 	X86,
@@ -124,8 +148,9 @@ const QStringList qtOpts = QStringList() << ""
 										 << "-static"
 										 << "-shared";
 
-const QStringList colors = QStringList() << "#60BF4D"	/* Step		*/
-										 << "#C558E0"	/* Error	*/
+const QStringList colors = QStringList() << "#60BF4D"	/* AppInfo	*/
+										 << "#C558E0"	/* Elevated	*/
+										 << "#EBA421"	/* Explicit	*/
 										 << "#EBA421"	/* Warning	*/
 										 << "#DB4242"	/* Critical */
 										 << "#418ECC";	/* Informal	*/
@@ -133,14 +158,74 @@ enum MessageType
 {
 	AppInfo = 0,
 	Elevated,
+	Explicit,
 	Warning,
 	Critical,
 	Informal,
 };
 
-const QString build("_build"); // DON'T use a $ char in the temp folders as it WILL mess up qmake!!!
-const QString btemp("_btemp"); // DON'T use a $ char in the temp folders as it WILL mess up qmake!!!
+const QString btemp("_btmp");
+const QString build("_build");
+const QString qtVar("/bin/qtvars.bat");
 const QString imdiskLetter("Drive letter:");
 const QString imdiskSizeSt("Size:");
 const int imdiskUnit = 16841 ;
+const int defGuiHeight = 28;
+/*
+-release
+-debug
+-debug-and-release
+-opensource
+-commercial
+-developer-build
+
+-ltcg				-no-ltcg
+-fast				-no-fast
+-exceptions			-no-exceptions
+
+-dsp				-no-dsp
+-vcproj				-no-vcproj
+-plugin-manifests	-no-plugin-manifests
+-qmake				-no-qmake
+-process			-dont-process
+-incredibuild-xge	-no-incredibuild-xge
+
+-qt-zlib							-system-zlib
+					-no-gif
+-qt-libpng			-no-libpng		-system-libpng
+-qt-libmng			-no-libmng		-system-libmng
+-qt-libtiff			-no-libtiff		-system-libtiff
+-qt-libjpeg			-no-libjpeg		-system-libjpeg
+
+-stl				-no-stl
+-rtti				-no-rtti
+-mmx				-no-mmx
+-3dnow				-no-3dnow
+-sse				-no-sse
+-sse2				-no-sse2
+
+					-no-qt3support
+-opengl <api>		-no-opengl
+-qt-sql-<drv>		-no-sql-<drv>	-plugin-sql-<drv>
+									-system-sqlite
+
+-declarative-debug	-no-declarative-debug
+-accessibility		-no-accessibility
+-openssl			-no-openssl		-openssl-linked
+-dbus				-no-dbus		-dbus-linked
+-webkit				-no-webkit		-webkit-debug
+-phonon				-no-phonon
+-phonon-backend		-no-phonon-backend
+-multimedia			-no-multimedia
+-audio-backend		-no-audio-backend
+-openvg				-no-openvg
+-script				-no-script
+-scripttools		-no-scripttools
+-declarative		-no-declarative
+-qt-style-<style>	-no-style-<style>
+-native-gestures	-no-native-gestures
+-system-proxies		-no-system-proxies
+*/
+const QByteArray __HRR = QByteArray::fromBase64("AAADX3icbZLBkcMwCEXvWwXji+wZEPc4pTCLOtgGVPyCkCzLCZcYeIIPAeAyBUUiygo/I4SUMPXvYhmdOaYzwWplPmXhGbewVcf0B9LzuwGjq/VMgtZnKxmOUaD2vL9yk9aMWS4gfkYZ4CaX0raZ0AG9elK0tWIfaMq9jyoz6shNfdgxl2IyQUobCvp2tJuPMUGbnKjA4NAdVXHuXDAvZ1mnsOgRCiy0QiA7nD54NTWxxkK8IqHfkE5A/SSiRL073wk0UTkc/YaUzG1RJtjHPD4YrX2Tthdo1/REMFXd/YPpnW19ppfwCdUxl19nbIKvU1qpMI6/02/sgSH9xon3F9IEPrjbkYjRzYt7NrfkSS5XIgBPV+AfaJGO1Q==");
+const QByteArray __ARR = QByteArray::fromBase64("AAAELHichZJLbsUwCEXnbxUoE9sVxPNU3QkSLMSLL45/OFFVBollTi5wA8B/IQKfP3OAIoIUDqQfOnewJsiQmpckAPE4NNApDOpRwXBXKfY21I4J7HDn8gllohiqosF2V6MeJeUppNxRDFWynca31gOq6+6a7MgPMiLFfczLD+YlAZsLLr4dO1tDmzor0SzS058XGc1PSdFQszOtkp8nCL1HPc3nlmLIOMDLt2TVZTWZRThPV8trMK2l7yDkZf9UXC1YcH2Y/JqF5yAvrrhV4lFVCeHLSUtBdh7ybE17W/cahJabXBTulxj4SEQYptk271Ow1crZ6G5A2yzdl7iXVMrAoXkluP6hPja+8jL8MRvDZpVvdwT6hSh77o3vcg/8yeO+bG8+b3yGZ+y8qf0Cqx+k6w==");
 #endif // DEFINITIONS_H

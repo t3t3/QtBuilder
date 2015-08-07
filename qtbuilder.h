@@ -26,6 +26,8 @@
 #include "definitions.h"
 
 #include <QMainWindow>
+#include <QBoxLayout>
+#include <QElapsedTimer>
 #include <QTextBrowser>
 #include <QTextEdit>
 #include <QProgressDialog>
@@ -36,14 +38,15 @@
 #include <QFileInfo>
 #include <QDir>
 
-class AppLog : public QTextBrowser
+class QtAppLog : public QTextBrowser
 {
 	Q_OBJECT
 
 public:
-	explicit AppLog(QWidget *parent = 0);
+	explicit QtAppLog(QWidget *parent = 0);
 	const QString logFile();
 
+	void addSeparator();
 	static const QString clean(QString text, bool extended = false);
 
 public slots:
@@ -55,6 +58,7 @@ private:
 	QStringList m_timestamp;
 	QStringList m_message;
 	QStringList m_description;
+	QString		m_logFile;
 	QList<int>  m_type;
 };
 
@@ -67,6 +71,12 @@ public:
 
 public slots:
 	void append(const QString &text, const QString &path);
+
+	void endFailure();
+	void endSuccess();
+
+private:
+	int m_lineCount;
 };
 
 class Progress : public QProgressDialog
@@ -80,9 +90,40 @@ public slots:
 	void setMaximum(int max);
 };
 
-class BuildProcess;
+class DiskSpaceBar : public QProgressBar
+{
+	Q_OBJECT
 
-class QtBuilder : public QMainWindow
+public:
+	DiskSpaceBar(const QString &name, int color, QWidget *parent);
+	inline int maxUsed() const	{ return m_diskSpace; }
+
+public slots:
+	void setDrive(const QString &path);
+	void reset() { m_diskSpace = 0; }
+	void refresh();
+
+protected:
+	void showEvent(QShowEvent *event);
+
+private:
+	QString m_name;
+	QString m_path;
+	uint m_diskSpace;
+};
+
+class CopyProgress : public QProgressBar
+{
+	Q_OBJECT
+
+public:
+	CopyProgress(QWidget *parent);
+
+public slots:
+	void progress(int count, const QString &file, qreal mbs);
+};
+
+class QtBuilder : public QMainWindow, private QElapsedTimer
 {
 	Q_OBJECT
 
@@ -90,10 +131,8 @@ signals:
 	void log(const QString &msg, const QString &text = QString(), int type = Informal);
 	void log(const QString &msg, int type);
 
-	void copyProgress(int count, const QString &file);
-	void newCopyCount(int count = -1);
-
-	void buildFinished();
+	void progress(int count, const QString &file, qreal mbs);
+	void cancelled();
 
 public:
 	explicit QtBuilder(QWidget *parent = 0);
@@ -101,36 +140,46 @@ public:
 
 	void exec();
 	void setup();
-	bool result() { return m_result; }
+
+	inline const QProcessEnvironment &environment() const { return m_env; }
+	inline const QString			&targetFolder() const { return m_target; }
 
 public slots:
-	void progress(int count, const QString &file);
+	void procOutput();
+	void procError();
+	void procLog();
 
 protected slots:
 	void end();
-	void procError();
-	void procOutput();
+	void endMessage();
 
 protected:
 	void createUi();
-	bool createTemp();
-	bool createTarget();
-	bool cleanTemp();
-	bool clearTarget(int msvc, int arch, int type);
-	bool copyTemp();
-	bool copyTarget(bool removeBuiltLibs);
-	bool removeTemp();
-	bool checkSource();
+	void createAddons(QBoxLayout *&lyt);
 
-	bool buildQt(int msvc, int arch, int type);
-	bool setEnvironment(QProcessEnvironment &env, const QString &vcVars, const QString &mkSpec);
+	bool createTarget(int msvc, int arch, int type);
+	bool createTemp	 ();
+	bool checkSource ();
+	bool copySource	 ();
+	bool copyTarget	 ();
+	bool removeTemp	 ();
+
+	bool prepare	 (int msvc, int arch, int type);
+	bool confClean	 ();
+	bool configure	 (int msvc, int arch, int type);
+	bool jomBuild	 ();
+	bool jomClean	 ();
+	bool cleanup	 ();
+	bool install	 ();
+
+	bool setEnvironment(const QString &vcVars, const QString &mkSpec);
 	void writeQtVars(const QString &path, const QString &vcVars, int msvc);
 	bool writeTextFile(const QString &filePath, const QString &text);
 	void registerQtVersion();
 
 	bool checkDir(int which);
 	bool checkDir(int which, int &result, QString &path, QString &name);
-	bool checkDir(int which, int &count);
+	bool checkDir(int which, int &count, bool skipRootFiles = false);
 
 	bool attachImdisk(QString &letter);
 	bool removeImdisk(bool silent, bool force);
@@ -139,41 +188,45 @@ protected:
 	void endProcess();
 	void closeEvent(QCloseEvent *event);
 
-	int copyFolder(const QString &source,  const QString &target);
+	int copyFolder(const QString &source,  const QString &target, int count, bool skipRootFiles = false);
 	void clearPath(const QString &dirPath);
 	bool removeDir(const QString &dirPath, const QStringList &inc = QStringList());
 	bool filterDir(const QString &dirPath);
 	bool filterExt(const QFileInfo &info);
 
 	const QString driveLetter();
-	const QString targetDir(int msvc, int arch, int type, QString &native);
+	const QString targetDir(int msvc, int arch, int type, QString &native, QStringList &t = QStringList());
 	bool qtSettings(QStringList &versions, QString &instDir);
 
-	bool normalExit() { return m_prc && m_prc->exitCode() ==  QProcess::NormalExit; }
-	QString stdOut()  { return m_prc  ? m_prc->readAllStandardOutput() : QString(); }
-	QString stdErr()  { return m_prc  ? m_prc->readAllStandardError()  : QString(); }
-
 private:
-	enum Dirs { Source, Target, Build, Temp, };
+	enum Dirs { Source, Target, Build, Temp };
 	enum BuildSteps
 	{
-		Start		 = 0,
-		ClearTarget	 = 1,
-		CreateTarget = 2,
-		CopyTemp	 = 3,
-		CopySource	 = 4,
-		BuildQt		 = 5,
-		CopyTarget	 = 6,
-		Finished	 = 7,
+		Start		 =  0,
+		CreateTarget =  1,
+		CreateTemp	 =  2,
+		CopySource	 =  3,
+		Prepare		 =  4,
+		ConfClean	 =  5,
+		Configure	 =  6,
+		JomBuild	 =  7,
+		JomClean	 =  8,
+		CleanUp		 =  9,
+		CopyTarget	 = 10,
+		Finished	 = 11,
 	};
+
 	QFutureWatcher<void> m_loop;
-	QProgressBar *m_spc;
-	QProcess *m_prc;
-	Progress *m_prg;
-	BuildLog *m_jom;
-	AppLog *m_log;
-	QString m_btemp;
+	QProcessEnvironment	 m_env;
+	CopyProgress *m_cpy;
+	DiskSpaceBar *m_tgt;
+	DiskSpaceBar *m_tmp;
+	QtAppLog *m_log;
+	BuildLog *m_bld;
+
+	QString m_drive;
 	QString m_build;
+	QString m_btemp;
 	QString m_target;
 	QString m_source;
 	QString m_version;
@@ -187,111 +240,56 @@ private:
 	QList<int> m_types;
 
 	uint m_imdiskUnit;
-	uint m_diskSpace;
+	bool m_keepDisk;
 
 	volatile int  m_state;
 	volatile bool m_result;
-	volatile bool m_building;
 	volatile bool m_cancelled;
-
-
-	class InlineProcess
-	{
-	public:
-		explicit InlineProcess(QtBuilder *builder, const QString &prog, const QString &args, bool blockOutput = false)
-			: m_builder(builder), m_buildPrc(NULL), m_unblockOutput(false)
-		{
-			if (!m_builder || !(m_buildPrc = m_builder->m_prc))
-				return;
-
-			if (	blockOutput)
-			{	m_unblockOutput = !m_buildPrc->signalsBlocked();
-				m_buildPrc->blockSignals(true);
-			}
-			{	m_buildPrc->setNativeArguments(args);
-				m_buildPrc->start(prog);
-				m_buildPrc->waitForFinished(-1);
-			}
-		}
-		virtual ~InlineProcess()
-		{
-			if (m_buildPrc)
-				m_buildPrc->close();
-
-			if (m_unblockOutput)
-				m_buildPrc->blockSignals(false);
-		}
-
-	private:
-		QtBuilder *m_builder;
-		QProcess *m_buildPrc;
-		bool m_unblockOutput;
-	};
-	class BuildProcess
-	{
-	public:
-		explicit BuildProcess(QtBuilder *builder, const QProcessEnvironment &env, bool blockOutput = false)
-			: m_builder(builder), m_buildPrc(NULL), m_unblockOutput(false), m_unsetBuilding(false)
-		{
-			if (!m_builder || !(m_buildPrc = m_builder->m_prc))
-				return;
-
-			if (!m_builder->m_building)
-			{	 m_builder->m_building = true;
-				 m_unsetBuilding = true;
-			}
-			if (	blockOutput)
-			{	m_unblockOutput = !m_buildPrc->signalsBlocked();
-				m_buildPrc->blockSignals(true);
-			}
-			{	m_buildPrc->setWorkingDirectory(m_builder->m_build);
-				m_buildPrc->setNativeArguments(QString());
-			}
-			if(!env.isEmpty())
-				m_buildPrc->setProcessEnvironment(env);
-		}
-		virtual ~BuildProcess()
-		{
-			if (m_buildPrc)
-			{	m_buildPrc->close();
-
-			if (m_unsetBuilding)
-				m_builder->m_building = false;
-
-			if (m_unblockOutput)
-				m_buildPrc->blockSignals(false);
-			}
-		}
-		inline void setArgs(const QString &args = QString())
-		{
-			if (m_buildPrc)
-				m_buildPrc->setNativeArguments(args);
-		}
-		inline void start(const QString &prog)
-		{
-			if (m_builder)
-				QDir::setCurrent(m_builder->m_build);
-
-			if (m_buildPrc)
-				m_buildPrc->start(prog);
-		}
-		inline bool result()
-		{
-			if (m_buildPrc)
-			{	m_buildPrc->waitForFinished(-1);
-			return
-				m_builder->normalExit();
-			}
-			return false;
-		}
-
-	private:
-		QtBuilder *m_builder;
-		QProcess *m_buildPrc;
-		bool m_unblockOutput;
-		bool m_unsetBuilding;
-	};
 };
 
+class QtProcess : public QProcess
+{
+	Q_OBJECT
+
+public:
+	explicit QtProcess(QtBuilder *builder, bool blockOutput = false);
+	virtual ~QtProcess();
+
+	void sendStdOut();
+	void sendStdErr();
+
+	const QString stdOut() { return readAllStandardOutput(); }
+	const QString stdErr() { return readAllStandardError();  }
+
+	inline bool normalExit() const { return !m_cancelled && exitCode() ==  NormalExit; }
+
+public slots:
+	void itStheEndOfTheWorldAsWeKnowIt();
+
+private:
+	QtBuilder *m_bld;
+	bool m_cancelled;
+};
+
+class InlineProcess : public QtProcess
+{
+public:
+	explicit InlineProcess(QtBuilder *builder, const QString &prog, const QString &args, bool blockOutput = false);
+	virtual ~InlineProcess();
+
+private:
+	bool m_blockStdOutput;
+};
+
+class BuildProcess : public QtProcess
+{
+public:
+	explicit BuildProcess(QtBuilder *builder, bool blockOutput = false);
+	virtual ~BuildProcess();
+
+	void setArgs(const QString &args);
+	void start(const QString &prog);
+	bool result();
+};
 
 #endif // QTBUILDER_H
