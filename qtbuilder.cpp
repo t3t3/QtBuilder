@@ -35,17 +35,19 @@
 #include <QDateTime>
 #include <QQueue>
 
-const int		qtBuilderRamDiskInGB =  3;		// ... ram disk size in gigabyte - needs imdisk installed: http://www.ltr-data.se/opencode.html/#ImDisk
-const QString	qtBuilderStaticDrive = "";//Y";	// ... use an existing drive letter; the ram disk part is skipped when set to anything else but ""; left-over build garbage will not get removed!
+const int	  qtBuilderRamDiskInGB =  3;		// ... ram disk size in gigabyte - needs imdisk installed: http://www.ltr-data.se/opencode.html/#ImDisk
+const QString qtBuilderStaticDrive = "";//Y";	// ... use an existing drive letter; the ram disk part is skipped when set to anything else but ""; left-over build garbage will not get removed!
+const QStringList  qtBuilderQtDirs = QStringList() << "";	// ... override detection from registry!
 
 void QtBuilder::setup() /// primary setup for the current build run!!!
 {
-	m_version = "4.8.7";						// ... source version for the current run; needs a valid install of an according msvc qt setup - stays unmodified!!!
-	m_libPath = "E:/WORK/PROG/LIBS/Qt";			// ... target path for creating the misc libs subdirs; should be of course different from the qt install location!!!
+//	m_version = "4.8.7";						// ... source version for the current run; needs a valid install of an according msvc qt setup;
+	m_version = "D:/BIZ/Qt/4.8.7_src";			// ... passing a full path to an install instead will override detection from registry entries. ... TODO ...
+	m_libPath = "E:/WORK/PROG/LIBS/Qt";			// ... target path for creating the misc libs subdirs; different from the qt install location!!
 
-	m_msvcs << MSVC2013<<MSVC2010;				// << MSVC2010 << MSVC2012 << MSVC2013 << MSVC2015;
-	m_archs << X86<<X64;						// << X86 << X64;
-	m_types << Shared<<Static;					// << Shared << Static;
+	m_msvcs << MSVC2013;						// << MSVC2010 << MSVC2012 << MSVC2013 << MSVC2015;
+	m_archs << X64;						// << X86 << X64;
+	m_types << Shared;					// << Shared << Static;
 }
 
 
@@ -54,6 +56,7 @@ QtBuilder::QtBuilder(QWidget *parent) : QMainWindow(parent),
 	m_log(NULL), m_cpy(NULL), m_tgt(NULL), m_tmp(NULL), m_state(Start),
 	m_cancelled(false), m_result(true), m_imdiskUnit(imdiskUnit), m_keepDisk(false)
 {
+	setWindowIcon(QIcon(":/graphics/icon.png"));
 	setWindowTitle(qApp->applicationName());
 	createUi();
 }
@@ -147,7 +150,6 @@ bool QtBuilder::qtSettings(QStringList &versions, QString &instDir)
 		log("No Qt version given", Elevated);
 		return false;
 	}
-
 	versions+= "HKEY_CURRENT_USER\\Software\\Trolltech\\Versions\\%1";
 	versions+= "HKEY_CURRENT_USER\\Software\\Digia\\Versions\\%1";
 	instDir  = "InstallDir";
@@ -278,15 +280,15 @@ void QtBuilder::createUi()
 	{	m_bld = new BuildLog(wgt);
 		vlt->addWidget(m_bld);
 	}
-	{	m_cpy = new CopyProgress(wgt);
-		vlt->addWidget(m_cpy);
-
-		connect(this, SIGNAL(progress(int, const QString &, qreal)), m_cpy, SLOT(progress(int, const QString &, qreal)), Qt::QueuedConnection);
-	}
 	{	m_tmp = new DiskSpaceBar("Build ", Informal, wgt);
 		vlt->addWidget(m_tmp);
 
 		connect(this, SIGNAL(progress(int, const QString &, qreal)), m_tmp, SLOT(refresh()), Qt::QueuedConnection);
+	}
+	{	m_cpy = new CopyProgress(wgt);
+		vlt->addWidget(m_cpy);
+
+		connect(this, SIGNAL(progress(int, const QString &, qreal)), m_cpy, SLOT(progress(int, const QString &, qreal)), Qt::QueuedConnection);
 	}
 	{	m_tgt = new DiskSpaceBar("Target", Elevated, wgt);
 		vlt->addWidget(m_tgt);
@@ -415,8 +417,43 @@ void QtBuilder::createAddons(QBoxLayout *&lyt)
 }
 
 // ~~thread safe (no mutexes) ...
+void QtBuilder::diskOp(int which, bool start, int count)
+{
+	if (start)
+	{
+		switch(which)
+		{
+		case Build:  CALL_QUEUED(m_tmp, hide); break;
+		case Target: CALL_QUEUED(m_tgt, hide); break;
+		}
+
+		CALL_QUEUED(m_cpy, setMaximum, (int, count));
+		CALL_QUEUED(m_cpy, show);
+	}
+	else
+	{
+		CALL_QUEUED(m_cpy, hide);
+		CALL_QUEUED(m_tmp, show);
+		CALL_QUEUED(m_tgt, show);
+	}
+}
+
+// ~~thread safe (no mutexes) ...
 bool QtBuilder::checkSource()
 {
+	if (QDir(m_version).exists())
+	{
+		QStringList n;
+		bool ok=false;  int v;
+		foreach(const QChar &c, m_version)
+			if (c.isDigit()&&(ok||(ok=(v=c.digitValue())>3||v<6)))
+				n.append(c);
+
+		m_source  = m_version;
+		m_version = n.join(".");
+		return true;
+	}
+
 	QStringList versions;
 	QString version, instDir;
 	if (!qtSettings(versions, instDir))
@@ -451,14 +488,14 @@ bool QtBuilder::checkSource()
 // ~~thread safe (no mutexes) ...
 bool QtBuilder::checkDir(int which)
 {
-	int result;
-	return checkDir(which, result, QString(), QString());
+	return checkDir(which, QString());
 }
 
 // ~~thread safe (no mutexes) ...
-bool QtBuilder::checkDir(int which, int &result, QString &path, QString &name)
+bool QtBuilder::checkDir(int which, QString &path)
 {
-	result = Critical;
+	int result = Critical;
+	QString name;
 	switch(which)
 	{
 	case Source:
@@ -484,21 +521,17 @@ bool QtBuilder::checkDir(int which, int &result, QString &path, QString &name)
 	default:
 		return false;
 	}
-
 	if (QDir(path).exists())
-		 result = Informal;
-	else log(QString("%1 removed").arg(name), QDir::toNativeSeparators(path), result);
-	return result != Critical;
+			result  = Informal;
+	else	log(QString("%1 removed").arg(name), QDir::toNativeSeparators(path), result);
+	return	result != Critical;
 }
 
 // ~~thread safe (no mutexes) ...
-bool QtBuilder::checkDir(int which, int &count, bool skipRootFiles)
+bool QtBuilder::checkDir(int which, QString &path, int &count, bool skipRootFiles)
 {
 	count = 0;
-	int dummy;
-
-	QString path, name;
-	if (!checkDir(which, dummy, path, name))
+	if (!checkDir(which, path))
 		return false;
 
 	QQueue<QDir> queue;
@@ -531,17 +564,18 @@ bool QtBuilder::checkDir(int which, int &count, bool skipRootFiles)
 }
 
 // ~~thread safe (no mutexes) ...
-int QtBuilder::copyFolder(const QString &source, const QString &target, int count, bool synchronize, bool skipRootFiles)
+int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 {
-	QDir s(source);
-	if (!s.exists())
+	int count = 0;
+	QString source, target;
+	if (!checkDir(to, target) ||
+		!checkDir(fr, source, count, skipRootFiles))
 		return 0;
 
-	CALL_QUEUED(m_cpy, setMaximum, (int, count));
-	CALL_QUEUED(m_cpy, show);
+	diskOp(to, true, count);
 
 	QQueue<QPair<QDir, QDir> > queue;
-	queue.enqueue(qMakePair(s, QDir(target)));
+	queue.enqueue(qMakePair(QDir(source), QDir(target)));
 	bool filter =!m_extFilter.isEmpty();
 
 	QFileInfoList sinfo, dinfo;
@@ -552,13 +586,12 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 	QFileInfo src, des;
 
 	qreal mb = 0;
-	count = 0;
 	start();
 
 	while(!queue.isEmpty())
 	{
 		if (m_cancelled)
-			return 0;
+			goto error;
 
 		pair = queue.dequeue();
 		srcDir = pair.first;
@@ -571,13 +604,13 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 			{
 				log("Synchronize faild; couldn't remove:",
 					QDir::toNativeSeparators(desDir.absolutePath()), Elevated);
-				return 0;
+				goto error;
 			}
 			continue;
 		}
 
 		if(!desDir.exists() && !QDir().mkpath(desDir.absolutePath()))
-			return 0;
+			goto error;
 
 		destd = desDir.absolutePath()+SLASH;
 		sinfo = srcDir.entryInfoList(QDir::Files);
@@ -588,7 +621,7 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 		else FOR_CONST_IT(sinfo)
 		{
 			if (m_cancelled)
-				return 0;
+				goto error;
 
 			src = *IT;
 			nme = src.fileName();
@@ -602,7 +635,7 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 			if (tgt.length() > 256)
 			{
 				log("Path length exceeded", nat, Elevated);
-				return 0;
+				goto error;
 			}
 			else if (!m_cancelled)
 			{
@@ -626,12 +659,12 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 			else if (exists && !QFile(tgt).remove())
 			{
 				log("Couldn't replace old file:", nat, Elevated);
-				return 0;
+				goto error;
 			}
 			else if (!QFile::copy(src.absoluteFilePath(), tgt))
 			{
 				log("Couldn't copy new file:", nat, Elevated);
-				return 0;
+				goto error;
 			}
 			else if (synchronize)
 			{
@@ -645,7 +678,7 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 			FOR_CONST_IT(dinfo)
 			{
 				if (m_cancelled)
-					return 0;
+					goto error;
 
 				des = *IT;
 				if (!compare.contains(des.fileName()) &&
@@ -653,7 +686,7 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 				{
 					log("Synchronize failed; couldn't remove:",
 						QDir::toNativeSeparators(des.absoluteFilePath()), Elevated);
-					return 0;
+					goto error;
 				}
 			}
 			compare.clear();
@@ -665,7 +698,7 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 		FOR_CONST_IT(sinfo)
 		{
 			if (m_cancelled)
-				return 0;
+				goto error;
 
 			srcDir = (*IT).absoluteFilePath();
 			nme = srcDir.dirName();
@@ -681,7 +714,7 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 			FOR_CONST_IT(dinfo)
 			{
 				if (m_cancelled)
-					return 0;
+					goto error;
 
 				des = *IT;
 				if (!compare.contains(des.fileName()) &&
@@ -689,13 +722,17 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 				{
 					log("Synchronize failed; couldn't remove:",
 						QDir::toNativeSeparators(des.absoluteFilePath()), Elevated);
-					return 0;
+					goto error;
 				}
 			}
 		}
 	}
 
-	CALL_QUEUED(m_cpy, hide);
+	goto end;
+	error:
+	count=0;
+	end:
+	diskOp();
 	return count;
 }
 

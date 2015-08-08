@@ -171,7 +171,7 @@ protected:
 	bool configure	 (int msvc, int type);
 	bool jomBuild	 ();
 	bool jomClean	 ();
-	bool cleanup	 ();
+	bool finished	 ();
 	bool install	 ();
 
 	bool setEnvironment(const QString &vcVars, const QString &mkSpec);
@@ -180,8 +180,10 @@ protected:
 	void registerQtVersion();
 
 	bool checkDir(int which);
-	bool checkDir(int which, int &result, QString &path, QString &name);
-	bool checkDir(int which, int &count, bool skipRootFiles = false);
+	bool checkDir(int which, QString &path);
+	bool checkDir(int which, QString &path, int &count, bool skipRootFiles = false);
+
+	void diskOp(int which = -1, bool start = false, int count = 0);
 
 	bool attachImdisk(QString &letter);
 	bool removeImdisk(bool silent, bool force);
@@ -190,7 +192,7 @@ protected:
 	void endProcess();
 	void closeEvent(QCloseEvent *event);
 
-	int copyFolder(const QString &source,  const QString &target, int count, bool synchronize = true, bool skipRootFiles = false);
+	int copyFolder(int fr,  int to, bool synchronize = true, bool skipRootFiles = false);
 	void clearPath(const QString &dirPath);
 	bool removeDir(const QString &dirPath, const QStringList &inc = QStringList());
 	bool filterDir(const QString &dirPath);

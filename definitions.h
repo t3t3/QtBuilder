@@ -11,9 +11,9 @@ const QString vc2013("Visual Studio 2013");
 const QString vc2015("Visual Studio 2015");
 
 const QStringList global = QStringList()	<<
+	"-debug-and-release"					<<
 	"-confirm-license"						<<
 	"-opensource"							<<
-	"-release"								<<
 	"-ltcg"									<<
 	"-mp"									<<
 	"-mmx"									<<
@@ -31,6 +31,8 @@ const QStringList plugins = QStringList()	<<
 	"-qt-style-windowsvista"				;
 
 const QStringList exclude = QStringList()	<<
+	"-audio-backend"						<<
+	"-multimedia"							<<
 	"-no-accessibility"						<<
 	"-no-dbus"								<<
 	"-no-declarative"						<<
@@ -66,17 +68,18 @@ const QStringList tfilter = QStringList()	<<
 	"/qt3support"							<<
 	"/scripttools"							<<
 	"/translations"							<<
-	"/util"									<<
 	"/webkit"								<<
 	"/config.profiles"						<<
 	"/config.tests"							<<
 	"/imports"								<<
-	"/tmp"									; // all lower case!
+	"/tmp"									<<
+	"/%SystemDrive%"						; // all lower case!
 
 const QStringList ffilter = QStringList()	<<
 	"dll"									<<
 	"lib"									<<
-	"pdb"									; // all lower case!
+	"pdb"									<<
+	"prl"									; // all lower case!
 
 const QStringList cfilter = QStringList()	<<
 	"c"										<<

@@ -92,7 +92,7 @@ void QtBuilder::loop()
 		}	break;
 
 		case CleanUp:
-		{	if(!(m_result = cleanup()))
+		{	if(!(m_result = finished()))
 				 m_state  = Finished;
 		}	break;
 
@@ -156,7 +156,7 @@ bool QtBuilder::createTemp()
 bool QtBuilder::createTarget(int msvc, int type, int arch)
 {
 	QStringList tp;
-	qString bldNat = QDir::toNativeSeparators(m_build);
+	QString bldNat = QDir::toNativeSeparators(m_build);
 	QString tgtNat, error;
 	m_target = targetDir(msvc, arch, type, tgtNat, tp);
 
@@ -173,17 +173,15 @@ bool QtBuilder::createTarget(int msvc, int type, int arch)
 	}
 	else if (dir.exists())
 	{
-		CALL_QUEUED(m_cpy, setMaximum, (int, 0));
-		CALL_QUEUED(m_cpy, show);
-
 		log("Clearing target folder:", tgtNat);
 		bool result = false;
+		diskOp(Target, true);
 
 		if ((result = removeDir(m_target)))
 			 log("Target directory removed:",  tgtNat);
 		else log("Couldn't clear target dir:", tgtNat, Critical);
 
-		CALL_QUEUED(m_cpy, hide);
+		diskOp();
 		if (!result)
 			return false;
 	}
@@ -213,25 +211,17 @@ bool QtBuilder::copySource()
 	log("Build step", "Copying source files ...", AppInfo);
 	QString native = QDir::toNativeSeparators(m_build);
 
-	if (!checkDir(Build))
-		return false;
-
 	m_dirFilter = sfilter;
 	m_extFilter = ffilter;
 	m_cancelled = false;
 
-	int count;
-	if (!checkDir(Source, count))
-		return false;
-
 	log("Copying contents to:", native);
-	CALL_QUEUED(m_tgt, hide);
 
-	if (!(count = copyFolder(m_source, m_build, count)))
-		log("Couldn't copy contents to:", native, Critical);
+	int  count;
+	if(!(count = copyFolder(Source, Build)))
+		 log("Couldn't copy contents to:", native, Critical);
 
 	log("Total files copied:", QString::number(count));
-	CALL_QUEUED(m_tgt, show);
 
 	return count && !m_cancelled;
 }
@@ -241,9 +231,6 @@ bool QtBuilder::copyTarget()
 {
 	log("Build step", "Copying target files ...", AppInfo);
 	QString native = QDir::toNativeSeparators(m_target);
-
-	if (!checkDir(Target))
-		return false;
 
 	if (!removeSymlink(m_target))
 	{
@@ -264,18 +251,13 @@ bool QtBuilder::copyTarget()
 	m_extFilter	= cfilter;
 	m_cancelled = false;
 
-	int count;
-	if (!checkDir(Build, count, true))
-		return false;
-
 	log("Copying contents to:", native);
-	CALL_QUEUED(m_tmp, hide);
 
-	if (!(count = copyFolder(m_build, m_target, count, false, true)))
-		log("Couldn't copy contents to:", native, Critical);
+	int  count;
+	if(!(count = copyFolder(Build, Target, false, true)))
+		 log("Couldn't copy contents to:", native, Critical);
 
 	log("Total files copied:", QString::number(++count));
-	CALL_QUEUED(m_tmp, show);
 
 	QFile(m_build+m_bld->logFile()).copy(m_target+m_bld->logFile());
 	return count && !m_cancelled;
@@ -330,7 +312,7 @@ bool QtBuilder::prepare(int msvc, int type, int arch)
 	bool result = true;
 	if(!(result = setEnvironment(vcVars, makeSpec)))
 	{
-		cleanup();
+		finished();
 		return false;
 	}
 
@@ -394,6 +376,7 @@ bool QtBuilder::jomBuild()
 // ~~thread safe (no mutexes) ...
 bool QtBuilder::jomClean()
 {
+return true;
 	log("Build step", "Running jom clean ...", AppInfo);
 
 	BuildProcess proc(this, true);
@@ -407,14 +390,14 @@ bool QtBuilder::jomClean()
 }
 
 // ~~thread safe (no mutexes) ...
-bool QtBuilder::cleanup()
+bool QtBuilder::finished()
 {
 	QLocale l(QLocale::English);
 	QString mbts = l.toString(m_tmp->maxUsed());
 	QString text = QString("<b>Time ... %1:%2 minutes ... %3 MB max. used temp disk space</b>");
 	uint secs = elapsed()/1000;
 	uint mins = secs/60;
-	text = text.arg(mins).arg(secs%mins,2,FILLNUL).arg(mbts);
+	text = text.arg(mins).arg(secs%mins,2,10,FILLNUL).arg(mbts);
 	log("Qt build done", text.toUpper(), Explicit);
 
 	registerQtVersion();

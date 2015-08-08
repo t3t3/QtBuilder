@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/graphics">
+        <file alias="icon.ico">QtBuilder.ico</file>
+        <file>icon.png</file>
+    </qresource>
+</RCC>

@@ -1,12 +1,19 @@
 #include "qtbuilder.h"
+#include "appinfo.h"
 #include <QApplication>
 
 int main(int argc, char *argv[])
 {
-	QCoreApplication::setOrganizationName("T3");
-	QCoreApplication::setOrganizationDomain("T3forWIN");
-	QCoreApplication::setApplicationName("QtBuilder");
-	QCoreApplication::setApplicationVersion("0.3.1.85");
+	QString app_version = QString("%1.%2.%3")
+	   .arg(APP_VERSION_MAJOR)
+	   .arg(APP_VERSION_MINOR)
+	   .arg(APP_VERSION_REVSN)
+	   .arg(APP_VERSION_BUILD);
+
+	QCoreApplication::setOrganizationDomain (APP_INFO_DOMAIN);
+	QCoreApplication::setOrganizationName   (APP_INFO_ORG);
+	QCoreApplication::setApplicationName    (APP_INFO_NAME);
+	QCoreApplication::setApplicationVersion (app_version);
 
 	QApplication a(argc, argv);
 	a.setQuitOnLastWindowClosed(false);
