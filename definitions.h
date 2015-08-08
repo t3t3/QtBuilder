@@ -4,10 +4,11 @@
 //
 // user config section...
 //
-const QString vc2010("D:/BIZ/MICROSOFT/Visual Studio 2010");
-const QString vc2012("D:/BIZ/MICROSOFT/Visual Studio 2012");
-const QString vc2013("D:/BIZ/MICROSOFT/Visual Studio 2013");
-const QString vc2015("D:/BIZ/MICROSOFT/Visual Studio 2015");
+const QString vcInst("D:/BIZ/MICROSOFT/" ); // TODO: replace by querying the registry!
+const QString vc2010("Visual Studio 2010");
+const QString vc2012("Visual Studio 2012");
+const QString vc2013("Visual Studio 2013");
+const QString vc2015("Visual Studio 2015");
 
 const QStringList global = QStringList()	<<
 	"-confirm-license"						<<
@@ -75,8 +76,7 @@ const QStringList tfilter = QStringList()	<<
 const QStringList ffilter = QStringList()	<<
 	"dll"									<<
 	"lib"									<<
-	"pdb"									<<
-	"prl"									; // all lower case!
+	"pdb"									; // all lower case!
 
 const QStringList cfilter = QStringList()	<<
 	"c"										<<
@@ -92,11 +92,27 @@ const QStringList targets = QStringList()	<<
 	"sub-xml"								<<
 	"sub-network"							<<
 	"sub-sql"								<<
+/*	"sub-testlib"							<< */
 	"sub-gui"								<<
+/*	"sub-qt3support"						<< */
+/*	"sub-uic3"								<< */
 	"sub-idc"								<<
+/*	"sub-activeqt"							<< */
 	"sub-opengl"							<<
+/*	"sub-xmlpatterns"						<< */
+/*	"sub-phonon"							<< */
 	"sub-multimedia"						<<
+	"sub-svg"								<<
+/*	"sub-script"							<< */
+/*	"sub-declarative"						<< */
+/*	"sub-webkit"							<< */
+/*	"sub-scripttools"						<< */
 	"sub-plugins"							;
+/*	"sub-imports"							<< */
+/*	"sub-tools"								<< */
+/*	"sub-translations"						<< */
+/*	"sub-examples"							<< */
+/*	"sub-demos"								<< */
 //
 // persistent configs...
 //
@@ -111,6 +127,10 @@ enum Modes
 	Static,
 	Shared
 };
+const QString vc2010Inst(vcInst+vc2010); // TODO: replace by querying the registry!
+const QString vc2012Inst(vcInst+vc2012);
+const QString vc2013Inst(vcInst+vc2013);
+const QString vc2015Inst(vcInst+vc2015);
 
 const QStringList paths	 = QStringList() << "Win32"
 										 << "x64"
@@ -123,10 +143,10 @@ const QStringList paths	 = QStringList() << "Win32"
 
 const QStringList builds = QStringList() << "x86"
 										 << "amd64"
-										 << vc2010
-										 << vc2012
-										 << vc2013
-										 << vc2015
+										 << vc2010Inst
+										 << vc2012Inst
+										 << vc2013Inst
+										 << vc2015Inst
 										 << ""
 										 << "";
 

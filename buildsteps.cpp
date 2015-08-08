@@ -24,6 +24,7 @@
 #include "qtbuilder.h"
 #include "helpers.h"
 
+#include <QApplication>
 #include <QUuid>
 
 // ~~thread safe (no mutexes) ...
@@ -51,7 +52,7 @@ void QtBuilder::loop()
 		switch(m_state	)
 		{
 		case CreateTarget:
-		{	if(!(m_result = createTarget(msvc, arch, type)))
+		{	if(!(m_result = createTarget(msvc, type, arch)))
 				 m_state  = Finished;
 		}	break;
 
@@ -66,7 +67,7 @@ void QtBuilder::loop()
 		}	break;
 
 		case Prepare:
-		{	if(!(m_result = prepare(msvc, arch, type)))
+		{	if(!(m_result = prepare(msvc, type, arch)))
 				 m_state  = Finished;
 		}	break;
 
@@ -76,7 +77,7 @@ void QtBuilder::loop()
 		}	break;
 
 		case Configure:
-		{	if(!(m_result = configure(msvc, arch, type)))
+		{	if(!(m_result = configure(msvc, type)))
 				 m_state  = Finished;
 		}	break;
 
@@ -144,7 +145,7 @@ bool QtBuilder::createTemp()
 		return false;
 	}
 
-	QFile(m_build+"/build.log").remove();
+	QFile(m_build+m_bld->logFile()).remove();
 	clearPath(m_build+"/lib");
 
 	CALL_QUEUED(m_tmp, setDrive, (QString, m_build));
@@ -152,11 +153,12 @@ bool QtBuilder::createTemp()
 }
 
 // ~~thread safe (no mutexes) ...
-bool QtBuilder::createTarget(int msvc, int arch, int type)
+bool QtBuilder::createTarget(int msvc, int type, int arch)
 {
 	QStringList tp;
-	QString native, error;
-	m_target = targetDir(msvc, arch, type, native, tp);
+	qString bldNat = QDir::toNativeSeparators(m_build);
+	QString tgtNat, error;
+	m_target = targetDir(msvc, arch, type, tgtNat, tp);
 
 	log("Build step", "Creating target folder ...", AppInfo);
 
@@ -167,19 +169,19 @@ bool QtBuilder::createTarget(int msvc, int arch, int type)
 	QFileInfo dir(m_target);
 	if ((exists = dir.symLinkTarget() == m_build))
 	{
-		log("Target folder already mounted:", native, Warning);
+		log("Target folder already mounted:", QString("%1 -> %2").arg(bldNat, tgtNat), Warning);
 	}
 	else if (dir.exists())
 	{
 		CALL_QUEUED(m_cpy, setMaximum, (int, 0));
 		CALL_QUEUED(m_cpy, show);
 
-		log("Clearing target folder:", native);
+		log("Clearing target folder:", tgtNat);
 		bool result = false;
 
 		if ((result = removeDir(m_target)))
-			 log("Target directory removed:",  native);
-		else log("Couldn't clear target dir:", native, Critical);
+			 log("Target directory removed:",  tgtNat);
+		else log("Couldn't clear target dir:", tgtNat, Critical);
 
 		CALL_QUEUED(m_cpy, hide);
 		if (!result)
@@ -188,18 +190,17 @@ bool QtBuilder::createTarget(int msvc, int arch, int type)
 
 	if (!QDir(mp).exists() && !QDir().mkpath(mp))
 	{
-		log("Couldn't create target dir:", native, Elevated);
+		log("Couldn't create target dir:", tgtNat, Elevated);
 		return false;
 	}
 	else if (!exists && !createSymlink(m_build, m_target, error))
 	{
-		log("Couldn't mount folder:", QString("%1 -> %2 (%3)")
-			.arg(QDir::toNativeSeparators(m_build), native, error), Critical);
+		log("Couldn't mount folder:", QString("%1 -> %2 (%3)").arg(bldNat, tgtNat, error), Critical);
 		return false;
 	}
 	else if (!exists)
 	{
-		log("Target directory created:", native);
+		log("Target directory mounted:", QString("%1 -> %2").arg(bldNat, tgtNat));
 	}
 
 	CALL_QUEUED(m_tgt, setDrive, (QString, m_target));
@@ -270,18 +271,18 @@ bool QtBuilder::copyTarget()
 	log("Copying contents to:", native);
 	CALL_QUEUED(m_tmp, hide);
 
-	if (!(count = copyFolder(m_build, m_target, count, true)))
+	if (!(count = copyFolder(m_build, m_target, count, false, true)))
 		log("Couldn't copy contents to:", native, Critical);
 
 	log("Total files copied:", QString::number(++count));
 	CALL_QUEUED(m_tmp, show);
 
-	QFile(m_build+"/build.log").copy(m_target+"/build.log");
+	QFile(m_build+m_bld->logFile()).copy(m_target+m_bld->logFile());
 	return count && !m_cancelled;
 }
 
 // ~~thread safe (no mutexes) ...
-bool QtBuilder::prepare(int msvc, int arch, int type)
+bool QtBuilder::prepare(int msvc, int type, int arch)
 {
 	if (!checkDir(Source))
 		return false;
@@ -289,6 +290,7 @@ bool QtBuilder::prepare(int msvc, int arch, int type)
 	if (!checkDir(Target))
 		return false;
 
+	QString makeSpec = qMakeS.at(msvc);
 	QString text = QString("<b>Version %1 ... %2 ... %3 bits ... %4</b>");
 	text = text.arg(m_version, type==Shared?"shared":"static", arch==X86 ?"32":"64", makeSpec);
 
@@ -324,7 +326,6 @@ bool QtBuilder::prepare(int msvc, int arch, int type)
 		vcVars = QDir::toNativeSeparators(
 			QString("call \"%1\" %2").arg(vcVars).arg(builds.at(arch)));
 	}
-	QString makeSpec = qMakeS.at(msvc);
 
 	bool result = true;
 	if(!(result = setEnvironment(vcVars, makeSpec)))
@@ -355,10 +356,9 @@ bool QtBuilder::confClean()
 }
 
 // ~~thread safe (no mutexes) ...
-bool QtBuilder::configure(int msvc, int arch, int type)
+bool QtBuilder::configure(int msvc, int type)
 {
 	log("Build step", "Running configure ...", AppInfo);
-	Q_UNUSED(arch);
 
 	QString qtConfig = QString("%1 %2 %3")
 	   .arg(qtOpts.at(msvc), qtOpts.at(type), (global+plugins+exclude).join(" "));
@@ -409,10 +409,12 @@ bool QtBuilder::jomClean()
 // ~~thread safe (no mutexes) ...
 bool QtBuilder::cleanup()
 {
-	QString text = QString("<b>Time: %1:%2 minutes ... %3 MB max. used temp disk space</b>");
+	QLocale l(QLocale::English);
+	QString mbts = l.toString(m_tmp->maxUsed());
+	QString text = QString("<b>Time ... %1:%2 minutes ... %3 MB max. used temp disk space</b>");
 	uint secs = elapsed()/1000;
 	uint mins = secs/60;
-	text = text.arg(mins).arg(secs%mins).arg(m_tmp->maxUsed());
+	text = text.arg(mins).arg(secs%mins,2,FILLNUL).arg(mbts);
 	log("Qt build done", text.toUpper(), Explicit);
 
 	registerQtVersion();
@@ -455,10 +457,13 @@ bool QtBuilder::setEnvironment(const QString &vcVars, const QString &mkSpec)
 		{
 			parts = value.split(";");
 			parts.removeDuplicates();
-			value.clear();
 			FOR_CONST_JT(parts)
-			   if (!(*JT).contains("common7\\ide", Qt::CaseInsensitive))
-				  value += (*JT)+";";
+			   if (!(*JT).contains(vc2010, Qt::CaseInsensitive) &&
+				   !(*JT).contains(vc2012, Qt::CaseInsensitive) &&
+				   !(*JT).contains(vc2013, Qt::CaseInsensitive) &&
+				   !(*JT).contains(vc2015, Qt::CaseInsensitive))
+					lines +=  (*JT);
+			value = lines.join(";");
 		}
 		m_env.insert(key, value);
 	}
@@ -522,14 +527,14 @@ bool QtBuilder::setEnvironment(const QString &vcVars, const QString &mkSpec)
 
 		if (key.toLower() == "path")
 		{
-			parts = value.split(";");
+			parts = value.split(";", QString::SkipEmptyParts);
 			parts.removeDuplicates();
 			value.clear();
 			FOR_CONST_JT(parts)
 			   if (!(*JT).contains("qt", Qt::CaseInsensitive))
 				  value += (*JT)+";";
 			value += tgtNat+"\\bin;";
-			value += tgtNat+"\\lib;";
+			value += tgtNat+"\\lib" ;
 		}
 		else if ( key.contains("qt", Qt::CaseInsensitive) ||
 				value.contains("qt", Qt::CaseInsensitive))

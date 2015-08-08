@@ -58,8 +58,8 @@ void Progress::setMaximum(int max)
 
 
 const QString qtBuilderProgressStyle("QProgressBar { border: none; color: white; background: #181818; text-align: left; vertical-align: center; } QProgressBar:disabled { color: #BBBBBB; background: #323232; }");
-const QString qtBuilderProgressTempl("  %1 MB/s ... %2");
-const QString qtBuilderDiskSpaceTmpl("  %1 disk usage: %2% | %3 GB");
+const QString qtBuilderProgressTempl(" %1 MB/s ... %2");
+const QString qtBuilderDiskSpaceTmpl("  %1 disk usage: %2 GB /%3%");
 
 CopyProgress::CopyProgress(QWidget *parent) : QProgressBar(parent)
 {
@@ -81,7 +81,7 @@ CopyProgress::CopyProgress(QWidget *parent) : QProgressBar(parent)
 
 void CopyProgress::progress(int count, const QString &file, qreal mbs)
 {
-	QString text = qtBuilderProgressTempl.arg(mbs,5,FMT_F,2,FILLSPC).arg(file);
+	QString text = qtBuilderProgressTempl.arg(mbs,6,FMT_F,2,FILLSPC).arg(file);
 
 	setValue(count);
 	setFormat(text);
@@ -140,11 +140,11 @@ void DiskSpaceBar::refresh()
 	m_diskSpace = qMax(m_diskSpace, usedmb);
 	qreal gbyte = usedmb/1024.0;
 	uint percnt = usedmb*100/total;
-	QString gbt = PLCHD.arg(gbyte,6,FMT_F,2,FILLSPC);
+	QString gbt = PLCHD.arg(gbyte,7,FMT_F,2,FILLSPC);
 	QString pct = QString::number(percnt).rightJustified(3,FILLSPC);
 
 	setValue(usedmb);
-	setFormat(qtBuilderDiskSpaceTmpl.arg(m_name, pct, gbt));
+	setFormat(qtBuilderDiskSpaceTmpl.arg(m_name, gbt, pct));
 }
 
 
@@ -277,9 +277,15 @@ BuildLog::BuildLog(QWidget *parent) : QTextEdit(parent),
 	setFocus();
 }
 
+const QString BuildLog::logFile()
+{
+	if (	m_logFile.isEmpty())
+			m_logFile = SLASH+qApp->applicationName()+".log";
+	return	m_logFile;
+}
 void BuildLog::append(const QString &text, const QString &path)
 {
-	if (text.simplified().isEmpty())
+	if (text.simplified().trimmed().isEmpty())
 		return;
 
 	if (!m_lineCount)
@@ -288,7 +294,7 @@ void BuildLog::append(const QString &text, const QString &path)
 	if (!qtBuilderWriteBldLog)
 		return;
 
-	QFile log(path+SLASH+"build.log");
+	QFile log(path+logFile());
 	if (log.open(QIODevice::Append))
 		log.write(text.toUtf8().constData());
 }
@@ -296,13 +302,16 @@ void BuildLog::append(const QString &text, const QString &path)
 void BuildLog::endFailure()
 {
 	if (!m_lineCount)
+	{
 		QTextEdit::append(___LF+___LF);
+		ensureCursorVisible();
+	}
 
 	QStringList a = QString(qUncompress(__ARR)).split(___LF);
 	if (a.count() > m_lineCount)
 	{
 		QTextEdit::append(a.at(m_lineCount++));
-		QTimer::singleShot(100, this, SLOT(endFailure()));
+		QTimer::singleShot(50, this, SLOT(endFailure()));
 	}
 	else if (a.count() == m_lineCount)
 	{
@@ -314,13 +323,16 @@ void BuildLog::endFailure()
 void BuildLog::endSuccess()
 {
 	if (!m_lineCount)
+	{
 		QTextEdit::append(___LF+___LF);
+		ensureCursorVisible();
+	}
 
 	QStringList h = QString(qUncompress(__HRR)).split(___LF);
 	if (h.count() > m_lineCount)
 	{
 		QTextEdit::append(h.at(m_lineCount++));
-		QTimer::singleShot(100, this, SLOT(endSuccess()));
+		QTimer::singleShot(50, this, SLOT(endSuccess()));
 	}
 	else if (h.count() == m_lineCount)
 	{

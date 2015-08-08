@@ -43,9 +43,9 @@ void QtBuilder::setup() /// primary setup for the current build run!!!
 	m_version = "4.8.7";						// ... source version for the current run; needs a valid install of an according msvc qt setup - stays unmodified!!!
 	m_libPath = "E:/WORK/PROG/LIBS/Qt";			// ... target path for creating the misc libs subdirs; should be of course different from the qt install location!!!
 
-	m_msvcs << MSVC2013;						// << MSVC2010 << MSVC2012 << MSVC2013 << MSVC2015;
+	m_msvcs << MSVC2013<<MSVC2010;				// << MSVC2010 << MSVC2012 << MSVC2013 << MSVC2015;
 	m_archs << X86<<X64;						// << X86 << X64;
-	m_types << Static;				// << Shared << Static;
+	m_types << Shared<<Static;					// << Shared << Static;
 }
 
 
@@ -209,6 +209,7 @@ void QtBuilder::exec()
 
 void QtBuilder::end()
 {
+	qDebug()<<"RESULT"<<m_result<<"CANCELLED"<<m_cancelled;
 	bool error = !m_result || m_cancelled;
 	m_log->add("QtBuilder ended with", QString(error?"%1":"no %1").arg("errors\r\n").toUpper(), AppInfo);
 
@@ -242,8 +243,14 @@ void QtBuilder::endMessage()
 		"<b>Process ended with errors!</b>"		:
 		"<b>Process sucessfully completed.</b>" ;
 
-	QString url("<br/><a href=\"file:///%1\">Open log file</a>");
+	QString url("<br/><a href=\"file:///%1\">Open app log file</a>");
 	msg +=  url.arg(QDir::toNativeSeparators(m_log->logFile()));
+
+	if (!m_result)
+	{
+		QString url("<br/><a href=\"file:///%1\">Open last buil log</a>");
+		msg +=  url.arg(QDir::toNativeSeparators(m_build+m_bld->logFile()));
+	}
 
 	QMessageBox b(this);
 	b.setText(msg);
@@ -524,7 +531,7 @@ bool QtBuilder::checkDir(int which, int &count, bool skipRootFiles)
 }
 
 // ~~thread safe (no mutexes) ...
-int QtBuilder::copyFolder(const QString &source, const QString &target, int count, bool skipRootFiles)
+int QtBuilder::copyFolder(const QString &source, const QString &target, int count, bool synchronize, bool skipRootFiles)
 {
 	QDir s(source);
 	if (!s.exists())
@@ -537,10 +544,12 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 	queue.enqueue(qMakePair(s, QDir(target)));
 	bool filter =!m_extFilter.isEmpty();
 
-	QFileInfoList sdirs, files;
+	QFileInfoList sinfo, dinfo;
 	QPair<QDir, QDir>  pair;
-	QString tgt, destd, nat;
+	QString tgt, destd, nat, nme;
+	QStringList compare;
 	QDir srcDir, desDir;
+	QFileInfo src, des;
 
 	qreal mb = 0;
 	count = 0;
@@ -556,25 +565,35 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 		desDir = pair.second;
 
 		if (filterDir(srcDir.absolutePath()))
+		{
+			if (synchronize && desDir.exists() &&
+			   !removeDir(desDir.absolutePath()))
+			{
+				log("Synchronize faild; couldn't remove:",
+					QDir::toNativeSeparators(desDir.absolutePath()), Elevated);
+				return 0;
+			}
 			continue;
+		}
 
 		if(!desDir.exists() && !QDir().mkpath(desDir.absolutePath()))
 			return 0;
 
 		destd = desDir.absolutePath()+SLASH;
-		files = srcDir.entryInfoList(QDir::Files);
-		QFileInfo src, des;
+		sinfo = srcDir.entryInfoList(QDir::Files);
 
 		if (skipRootFiles)
-			skipRootFiles = false;
-
-		else FOR_CONST_IT(files)
+		{	skipRootFiles = false;
+		}
+		else FOR_CONST_IT(sinfo)
 		{
 			if (m_cancelled)
 				return 0;
 
 			src = *IT;
-			tgt = destd+src.fileName();
+			nme = src.fileName();
+			tgt = destd+nme;
+			des = QFileInfo(tgt);
 			nat = QDir::toNativeSeparators(tgt);
 
 			if (filter && filterExt(src))
@@ -588,11 +607,10 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 			else if (!m_cancelled)
 			{
 				count++;
-				des =  QFileInfo(tgt);
 				mb +=src.size()/MBYTE;
 				quint64 e = elapsed();
 
-				if  (!((e)%150))
+				if (e && !((e)%10))
 					emit progress(count, nat, mb*1000/e);
 			}
 
@@ -601,30 +619,79 @@ int QtBuilder::copyFolder(const QString &source, const QString &target, int coun
 				des.size() == src.size() &&
 				des.lastModified() == src.lastModified())
 			{
+				if (synchronize)
+					compare.append(nme);
 				continue;
 			}
 			else if (exists && !QFile(tgt).remove())
 			{
-				log("Couldn't replace file", nat, Elevated);
+				log("Couldn't replace old file:", nat, Elevated);
 				return 0;
 			}
 			else if (!QFile::copy(src.absoluteFilePath(), tgt))
 			{
-				log("Couldn't copy file", nat, Elevated);
+				log("Couldn't copy new file:", nat, Elevated);
 				return 0;
+			}
+			else if (synchronize)
+			{
+				compare.append(nme);
 			}
 		}
 
-		sdirs = srcDir.entryInfoList(QDir::AllDirs | QDir::NoDotAndDotDot);
+		if (synchronize)
+		{
+			dinfo = desDir.entryInfoList(QDir::Files);
+			FOR_CONST_IT(dinfo)
+			{
+				if (m_cancelled)
+					return 0;
+
+				des = *IT;
+				if (!compare.contains(des.fileName()) &&
+					!QFile(des.absoluteFilePath()).remove())
+				{
+					log("Synchronize failed; couldn't remove:",
+						QDir::toNativeSeparators(des.absoluteFilePath()), Elevated);
+					return 0;
+				}
+			}
+			compare.clear();
+		}
+
+		sinfo = srcDir.entryInfoList(QDir::AllDirs | QDir::NoDotAndDotDot);
 		destd = desDir.absolutePath()+SLASH;
 
-		FOR_CONST_IT(sdirs)
+		FOR_CONST_IT(sinfo)
 		{
 			if (m_cancelled)
 				return 0;
 
 			srcDir = (*IT).absoluteFilePath();
-			queue.enqueue(qMakePair(srcDir, QDir(destd+srcDir.dirName())));
+			nme = srcDir.dirName();
+			queue.enqueue(qMakePair(srcDir, QDir(destd+nme)));
+
+			if (synchronize)
+				compare.append(nme);
+		}
+
+		if (synchronize)
+		{
+			dinfo = desDir.entryInfoList(QDir::AllDirs | QDir::NoDotAndDotDot);
+			FOR_CONST_IT(dinfo)
+			{
+				if (m_cancelled)
+					return 0;
+
+				des = *IT;
+				if (!compare.contains(des.fileName()) &&
+					!removeDir(des.absoluteFilePath()))
+				{
+					log("Synchronize failed; couldn't remove:",
+						QDir::toNativeSeparators(des.absoluteFilePath()), Elevated);
+					return 0;
+				}
+			}
 		}
 	}
 

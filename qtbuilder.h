@@ -44,9 +44,9 @@ class QtAppLog : public QTextBrowser
 
 public:
 	explicit QtAppLog(QWidget *parent = 0);
-	const QString logFile();
 
 	void addSeparator();
+	const QString logFile();
 	static const QString clean(QString text, bool extended = false);
 
 public slots:
@@ -68,6 +68,7 @@ class BuildLog : public QTextEdit
 
 public:
 	explicit BuildLog(QWidget *parent = 0);
+	const QString logFile();
 
 public slots:
 	void append(const QString &text, const QString &path);
@@ -76,6 +77,7 @@ public slots:
 	void endSuccess();
 
 private:
+	QString m_logFile;
 	int m_lineCount;
 };
 
@@ -157,16 +159,16 @@ protected:
 	void createUi();
 	void createAddons(QBoxLayout *&lyt);
 
-	bool createTarget(int msvc, int arch, int type);
+	bool createTarget(int msvc, int type, int arch);
 	bool createTemp	 ();
 	bool checkSource ();
 	bool copySource	 ();
 	bool copyTarget	 ();
 	bool removeTemp	 ();
 
-	bool prepare	 (int msvc, int arch, int type);
+	bool prepare	 (int msvc, int type, int arch);
 	bool confClean	 ();
-	bool configure	 (int msvc, int arch, int type);
+	bool configure	 (int msvc, int type);
 	bool jomBuild	 ();
 	bool jomClean	 ();
 	bool cleanup	 ();
@@ -188,7 +190,7 @@ protected:
 	void endProcess();
 	void closeEvent(QCloseEvent *event);
 
-	int copyFolder(const QString &source,  const QString &target, int count, bool skipRootFiles = false);
+	int copyFolder(const QString &source,  const QString &target, int count, bool synchronize = true, bool skipRootFiles = false);
 	void clearPath(const QString &dirPath);
 	bool removeDir(const QString &dirPath, const QStringList &inc = QStringList());
 	bool filterDir(const QString &dirPath);
