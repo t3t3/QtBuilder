@@ -26,6 +26,9 @@
 
 #include <QApplication>
 #include <QMotifStyle>
+#include <QStyleOptionSlider>
+#include <QPainter>
+#include <QMouseEvent>
 #include <QDateTime>
 #include <QTimer>
 
@@ -57,9 +60,11 @@ void Progress::setMaximum(int max)
 
 
 
-const QString qtBuilderProgressStyle("QProgressBar { border: none; color: white; background: #181818; text-align: left; vertical-align: center; } QProgressBar:disabled { color: #BBBBBB; background: #323232; }");
 const QString qtBuilderProgressTempl(" %1 MB/s ... %2");
 const QString qtBuilderDiskSpaceTmpl("  %1 disk usage: %2 GB /%3%");
+const QString qtBuilderProgressStyle(
+	 "QProgressBar			{ color: #FFFFFF; background: #181818; border: none; text-align: left; vertical-align: center; }"
+	 "QProgressBar:disabled { color: #BBBBBB; background: #323232; }");
 
 QtProgress::QtProgress(int color, QWidget *parent) : QProgressBar(parent)
 {
@@ -284,6 +289,7 @@ const QString BuildLog::logFile()
 			m_logFile = SLASH+qApp->applicationName()+".log";
 	return	m_logFile;
 }
+
 void BuildLog::append(const QString &text, const QString &path)
 {
 	if (text.simplified().trimmed().isEmpty())
@@ -303,10 +309,7 @@ void BuildLog::append(const QString &text, const QString &path)
 void BuildLog::endFailure()
 {
 	if (!m_lineCount)
-	{
 		QTextEdit::append(___LF+___LF);
-		ensureCursorVisible();
-	}
 
 	QStringList a = QString(qUncompress(__ARR)).split(___LF);
 	if (a.count() > m_lineCount)
@@ -317,17 +320,15 @@ void BuildLog::endFailure()
 	else if (a.count() == m_lineCount)
 	{
 		QTextEdit::append(___LF);
-		m_lineCount++;
+		m_lineCount =  0;
 	}
+	ensureCursorVisible();
 }
 
 void BuildLog::endSuccess()
 {
 	if (!m_lineCount)
-	{
 		QTextEdit::append(___LF+___LF);
-		ensureCursorVisible();
-	}
 
 	QStringList h = QString(qUncompress(__HRR)).split(___LF);
 	if (h.count() > m_lineCount)
@@ -338,6 +339,247 @@ void BuildLog::endSuccess()
 	else if (h.count() == m_lineCount)
 	{
 		QTextEdit::append(___LF);
-		m_lineCount++;
+		m_lineCount =  0;
 	}
+	ensureCursorVisible();
+}
+
+
+
+QtSlider::QtSlider(int bgnd, int color, QWidget *parent) : QSlider(parent),
+	m_clickSet(false), m_sliding(false)
+{
+	setStyle(new SliderProxyStyle(style()));
+	setOrientation(Qt::Horizontal);
+	setFocusPolicy(Qt::NoFocus);
+	setAttribute(Qt::WA_Hover);
+	setCursor(Qt::ArrowCursor);
+	setMouseTracking(true);
+
+	QPalette p(palette());
+	p.setColor(QPalette::Highlight, colors.at(color));
+	p.setColor(QPalette::Background, colors.at(bgnd));
+	setPalette(p);
+}
+
+void QtSlider::setOrientation(Qt::Orientation o)
+{
+	QSlider::setOrientation(o);
+	if (o == Qt::Horizontal)
+	{
+		setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+		setMinimumHeight(defGuiHeight);
+		setMaximumHeight(defGuiHeight);
+		setMinimumWidth (defGuiHeight);
+		setMaximumWidth (QT_MAX_UI);
+	}
+	else
+	{
+		setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Minimum);
+		setMinimumWidth (defGuiHeight);
+		setMaximumWidth (defGuiHeight);
+		setMinimumHeight(defGuiHeight);
+		setMaximumHeight(QT_MAX_UI);
+	}
+}
+
+void QtSlider::mouseMoveEvent(QMouseEvent *event)
+{
+	if (m_sliding)
+	{
+		setValue(valueFromPosition(event->pos()));
+	}
+	else if (isOnHandle(event->pos()))
+	{
+		setCursor(Qt::PointingHandCursor);
+	}
+	else
+	{
+		setCursor(Qt::ArrowCursor);
+	}
+	event->accept();
+}
+
+void QtSlider::mousePressEvent(QMouseEvent *event)
+{
+	if (mouseLocked())
+	{
+		event->ignore();
+	}
+	else if (event->button() == Qt::LeftButton)
+	{
+		if ((m_clickSet = !isOnHandle(event->pos())))
+		{
+			event->ignore();
+		}
+		else
+		{
+			if (cursor().shape()!=Qt::PointingHandCursor)
+						setCursor(Qt::PointingHandCursor);
+
+			m_sliding = true;
+			event->accept();
+		}
+		emit sliderPressed();
+	}
+}
+
+void QtSlider::mouseReleaseEvent(QMouseEvent *event)
+{
+	if (m_clickSet)
+		setValue(valueFromPosition(event->pos()));
+
+	bool wasLocked = mouseLocked();
+	m_sliding  = false;
+	m_clickSet = false;
+
+	if (wasLocked)
+	{
+		if (event->button() == Qt::LeftButton)
+			emit sliderReleased();
+
+		event->ignore();
+	}
+
+	if (cursor().shape()!=Qt::ArrowCursor)
+				setCursor(Qt::ArrowCursor);
+	repaint();
+}
+
+void QtSlider::keyPressEvent(QKeyEvent *event)
+{
+	event->ignore();
+}
+
+void QtSlider::keyReleaseEvent(QKeyEvent *event)
+{
+	event->ignore();
+}
+
+int QtSlider::valueFromPosition(const QPoint &pos) const
+{
+	QStyleOptionSlider opt;
+	initStyleOption ( &opt );
+
+	qreal s = style()->pixelMetric(QStyle::PM_SliderControlThickness,&opt,this)/2.0;
+	qreal min = minimum();
+	qreal max = maximum();
+
+	if (orientation() == Qt::Horizontal)
+	{
+		qreal w = width();
+		return qRound(Map((qreal)pos.x(),s,w-s,min,max));
+	}
+	else
+	{
+		qreal h = height();
+		return qRound(Map((qreal)pos.y(),s,h-s,min,max));
+	}
+}
+
+bool QtSlider::isOnHandle(const QPoint &pos) const
+{
+	QStyleOptionSlider opt;
+	initStyleOption ( &opt );
+
+	QRect  r = style()->subControlRect(QStyle::CC_Slider, &opt, QStyle::SC_SliderHandle, this);
+	return r.contains(pos);
+}
+
+QSize QtSlider::minimumSizehint() const
+{
+	if (orientation() == Qt::Horizontal)
+		return QSize(QSlider::minimumSizeHint().width(), defGuiHeight);
+
+	return QSize(defGuiHeight, QSlider::minimumSizeHint().height());
+}
+
+
+
+SliderProxyStyle::SliderProxyStyle(QStyle *baseStyle) : QProxyStyle(baseStyle)
+{
+}
+
+int SliderProxyStyle::pixelMetric(PixelMetric pMetric, const QStyleOption *opt, const QWidget *wgt) const
+{	//
+	// note: apparently all these values only deal with the height (for a horizontal slider)
+	// or the width (for a vertical slider), of certain elements, but not the "sliding span"
+	// ... except the "PM_SliderLength" value which effects the lenght of the _handle_ !!!!!
+	//
+	switch(pMetric)
+	{
+	case PM_SliderLength:			//...the lenght of the _handle_ (not just the slider)
+	case PM_SliderThickness:		//...this is the slider thickness without tick marks!
+	case PM_SliderSpaceAvailable:	//...this is the thickness inc. the tick marks space!
+	case PM_SliderControlThickness: //...just as the name implies - the handle thickness!
+		return defGuiHeight;
+
+	case PM_SliderTickmarkOffset:
+		return 0;
+	}
+	return QProxyStyle::pixelMetric(pMetric, opt, wgt);
+}
+
+QRect SliderProxyStyle::subControlRect(ComplexControl ctrl, const QStyleOptionComplex *opt, SubControl sub, const QWidget *wgt) const
+{
+	QRect rect = QProxyStyle::subControlRect(ctrl, opt, sub, wgt);
+	if (ctrl == CC_Slider && sub == SC_SliderHandle)
+	{
+		const QStyleOptionSlider *o = static_cast<const QStyleOptionSlider *>(opt);
+		qreal val = o->sliderValue;
+		qreal min = o->minimum;
+		qreal max = o->maximum;
+
+		qreal t = pixelMetric(PM_SliderControlThickness, opt, wgt);
+		bool  h = o->orientation == Qt::Horizontal;
+		qreal s = h ? wgt->width() : wgt->height();
+		int   v = qRound(Map(val,min,max,t/2,s-t/2));
+
+		rect= QRectF(-1,-1,t+1,t+1).toRect(); // ... avoid minimal paint offset @ end positions due to rounding by painting the handle 1px bigger in any direction!
+		h	? rect.moveCenter(QPoint(v,o->rect.center().y()))
+			: rect.moveCenter(QPoint(o->rect.center().x(),v));
+	}
+	return rect;
+}
+
+void SliderProxyStyle::drawComplexControl(ComplexControl ctrl, const QStyleOptionComplex *opt, QPainter *p, const QWidget *wgt) const
+{
+	if (ctrl != CC_Slider)
+		return;
+
+	QPalette pl = opt->palette;
+	QBrush high = pl.highlight();
+	QBrush bgnd = pl.background();
+	bool enable = wgt->isEnabled();
+	if (!enable)
+	{
+		high = QBrush("#969696");
+		bgnd = QBrush("#565656");
+	}
+
+	const QtSlider *qsl = qobject_cast<const QtSlider *>(wgt);
+	QRectF h = subControlRect(CC_Slider, opt, SC_SliderHandle, wgt);
+	QRect  r = opt->rect;
+	int  off = r.width()/20;
+	int  val = qsl->value();
+	bool lft = val*2 > (qsl->maximum()-qsl->minimum());
+
+	p->setRenderHint(QPainter::Antialiasing);
+	p->fillRect(r, bgnd);
+
+	QTextOption o;
+	if (lft) o.setAlignment(Qt::AlignLeft |Qt::AlignVCenter);
+	else	 o.setAlignment(Qt::AlignRight|Qt::AlignVCenter);
+
+	p->setPen(Qt::black);
+	p->drawText(r.adjusted(off,0,-off,0), wgt->accessibleName(), o);
+	p->fillRect(h, high);
+
+	QFont f = p->font();
+	f.setPointSize(14);
+	p->setFont(f);
+
+	p->setPen(Qt::white);
+	o.setAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+	p->drawText(h, QString::number(val), o);
 }

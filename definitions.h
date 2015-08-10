@@ -12,17 +12,13 @@ const QString vc2012("Visual Studio 2012");
 const QString vc2013("Visual Studio 2013");
 const QString vc2015("Visual Studio 2015");
 
-const QString _dbAndRl("-debug-and-release");
-const QString _debuglb("-debug");
-const QString _release("-release");
-
 const QStringList globals = QStringList()
-	<< _dbAndRl
 	<< "-confirm-license"
 	<< "-opensource"
 ;
 const QStringList switches = QStringList()
 	<< "-mp"
+	<< "-fast"
 	<< "-ltcg"
 ;
 const QStringList features = QStringList()
@@ -53,6 +49,7 @@ const QStringList exclude = QStringList()
 	<< "-no-script"
 	<< "-no-scripttools"
 	<< "-no-webkit"
+	<< "-no-xmlpatterns"
 	<< "-nomake demos"
 	<< "-nomake docs"
 	<< "-nomake examples"
@@ -81,7 +78,6 @@ const QStringList tfilter = QStringList() /* lower case! */
 	<< "/config.tests"
 	<< "/imports"
 	<< "/tmp"
-	<< "/%systemdrive%"
 ;
 const QStringList ffilter = QStringList() /* lower case! */
 	<< "dll"
@@ -92,8 +88,9 @@ const QStringList ffilter = QStringList() /* lower case! */
 const QStringList cfilter = QStringList() /* lower case! */
 	<< "c"
 	<< "cpp"
+	<< "prl"
 ;
-const QStringList targets = QStringList()
+const QStringList targets = QStringList() /* used if the according global bool is set */
 	<< "sub-tools-bootstrap"
 	<< "sub-moc"
 	<< "sub-rcc"
@@ -130,14 +127,16 @@ const QStringList targets = QStringList()
 //
 enum Mode
 {
-	X86,
-	X64,
-	MSVC2010,
-	MSVC2012,
-	MSVC2013,
-	MSVC2015,
-	Static,
-	Shared
+	X86		 =  0,
+	X64		 =  1,
+	MSVC2010 =  2,
+	MSVC2012 =  3,
+	MSVC2013 =  4,
+	MSVC2015 =  5,
+	Shared	 =  6,
+	Static	 =  7,
+	Debug	 =  8,
+	Release	 =  9,
 };
 
 const QString vc2010Inst(vcInst+vc2010); // TODO: replace by querying the registry!
@@ -152,8 +151,10 @@ const QStringList modeLabels = QStringList()
 	<< "Visual Studio 2012"
 	<< "Visual Studio 2013"
 	<< "Visual Studio 2015"
-	<< "Static Build"
-	<< "Shared Build"
+	<< "Shared Libraries"
+	<< "Static Libraries"
+	<< "Build Debug"
+	<< "Build Release"
 ;
 const QStringList bPaths = QStringList()
 	<< "Win32"
@@ -162,8 +163,10 @@ const QStringList bPaths = QStringList()
 	<< "v110"
 	<< "v120"
 	<< "v130"
-	<< "static"
 	<< "shared"
+	<< "static"
+	<< ""
+	<< ""
 ;
 const QStringList builds = QStringList()
 	<< "x86"
@@ -172,6 +175,8 @@ const QStringList builds = QStringList()
 	<< vc2012Inst
 	<< vc2013Inst
 	<< vc2015Inst
+	<< ""
+	<< ""
 	<< ""
 	<< ""
 ;
@@ -184,6 +189,8 @@ const QStringList qMakeS = QStringList()
 	<< "win32-msvc2015"
 	<< ""
 	<< ""
+	<< ""
+	<< ""
 ;
 const QStringList qtOpts = QStringList()
 	<< ""
@@ -192,8 +199,10 @@ const QStringList qtOpts = QStringList()
 	<< QString("-platform %1").arg(qMakeS.at(MSVC2012))
 	<< QString("-platform %1").arg(qMakeS.at(MSVC2013))
 	<< QString("-platform %1").arg(qMakeS.at(MSVC2015))
-	<< "-static"
 	<< "-shared"
+	<< "-static"
+	<< "-debug"
+	<< "-release"
 ;
 const QStringList colors = QStringList()
 	<< "#60BF4D"	/* AppInfo	*/
@@ -221,7 +230,7 @@ const QString imdiskSizeSt("Size:");
 const int imdiskUnit = 16841 ;
 const int defGuiHeight = 28;
 
-const QStringList globalOptions = QStringList()
+const QStringList globalSwitches = QStringList()
 	<< "-opensource"
 	<< "-commercial"
 	<< "-developer-build"
@@ -232,10 +241,9 @@ const QStringList compileSwitches = QStringList() /* with or without "-no" prefi
 	<< "-fast"
 	<< "-dsp"
 	<< "-vcproj"
-	<< "-plugin-manifests"
 	<< "-process"
 	<< "-incredibuild-xge"
-/*	<< "-qmake" ... no chance to build from source without qmake! */
+	<< "-plugin-manifests"
 ;
 const QStringList featureSwitches = QStringList() /* with or without "-no" prefix */
 	<< "-exceptions"
@@ -245,6 +253,10 @@ const QStringList featureSwitches = QStringList() /* with or without "-no" prefi
 	<< "-3dnow"
 	<< "-sse"
 	<< "-sse2"
+	<< "-iconv"
+	<< "-directwrite"
+	<< "-nis"
+	<< "-neon"
 ;
 const QStringList targetSwitches = QStringList() /* with or without "-no" prefix */
 /*	<< "-declarative-debug"	... dependency needed */
@@ -253,6 +265,7 @@ const QStringList targetSwitches = QStringList() /* with or without "-no" prefix
 /*	<< "-openssl-linked"	... dependency needed */
 	<< "-dbus"
 /*	<< "-dbus-linked"		... dependency needed */
+	<< "-xmlpatterns"
 	<< "-webkit"
 /*	<< "-webkit-debug"		... dependency needed */
 	<< "-phonon"
@@ -265,6 +278,7 @@ const QStringList targetSwitches = QStringList() /* with or without "-no" prefix
 	<< "-declarative"
 	<< "-native-gestures"
 	<< "-system-proxies"
+	<< "-fontconfig"
 ;
 /*
 -release
@@ -319,6 +333,7 @@ const QStringList targetSwitches = QStringList() /* with or without "-no" prefix
 -declarative		-no-declarative
 -qt-style-<style>	-no-style-<style>
 -native-gestures	-no-native-gestures
+-directwrite		-no-directwrite
 -system-proxies		-no-system-proxies
 */
 const QByteArray __HRR = QByteArray::fromBase64("AAADX3icbZLBkcMwCEXvWwXji+wZEPc4pTCLOtgGVPyCkCzLCZcYeIIPAeAyBUUiygo/I4SUMPXvYhmdOaYzwWplPmXhGbewVcf0B9LzuwGjq/VMgtZnKxmOUaD2vL9yk9aMWS4gfkYZ4CaX0raZ0AG9elK0tWIfaMq9jyoz6shNfdgxl2IyQUobCvp2tJuPMUGbnKjA4NAdVXHuXDAvZ1mnsOgRCiy0QiA7nD54NTWxxkK8IqHfkE5A/SSiRL073wk0UTkc/YaUzG1RJtjHPD4YrX2Tthdo1/REMFXd/YPpnW19ppfwCdUxl19nbIKvU1qpMI6/02/sgSH9xon3F9IEPrjbkYjRzYt7NrfkSS5XIgBPV+AfaJGO1Q==");

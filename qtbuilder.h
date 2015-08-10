@@ -31,12 +31,14 @@
 #include <QProgressBar>
 #include <QTextBrowser>
 #include <QTextEdit>
-#include <QBoxLayout>
+#include <QSlider>
 #include <QLabel>
-#include <QProcess>
-#include <QSettings>
+#include <QBoxLayout>
+#include <QProxyStyle>
 #include <QSignalMapper>
 #include <QFutureWatcher>
+#include <QSettings>
+#include <QProcess>
 #include <QFileInfo>
 #include <QDir>
 
@@ -102,7 +104,7 @@ class QtProgress : public QProgressBar
 	Q_OBJECT
 
 public:
-	QtProgress(int color, QWidget *parent = 0);
+	explicit QtProgress(int color, QWidget *parent = 0);
 };
 
 class DiskSpaceBar : public QtProgress
@@ -110,7 +112,7 @@ class DiskSpaceBar : public QtProgress
 	Q_OBJECT
 
 public:
-	DiskSpaceBar(QWidget *parent, int color, const QString &name);
+	explicit DiskSpaceBar(QWidget *parent, int color, const QString &name);
 	inline int maxUsed() const	{ return m_diskSpace; }
 
 public slots:
@@ -132,7 +134,7 @@ class CopyProgress : public QtProgress
 	Q_OBJECT
 
 public:
-	CopyProgress(QWidget *parent);
+	explicit CopyProgress(QWidget *parent);
 
 public slots:
 	void setMaximum(int maximum);
@@ -148,7 +150,7 @@ signals:
 	void checked(bool);
 
 public:
-	Selections(const QString &label, int color, QWidget *parent);
+	explicit Selections(const QString &label, int color, QWidget *parent);
 
 	inline void setDisabled	(bool on) {  m_disabled  = on; }
 	inline void setSorting	(bool on) {  m_sorting   = on; }
@@ -159,6 +161,7 @@ public:
 	void create();
 
 public slots:
+	void disable(bool disable);
 	void activate(const Modes &modes);
 
 protected slots:
@@ -184,7 +187,7 @@ class QtHeader : public QLabel
 	Q_OBJECT
 
 public:
-	QtHeader(const QString &text, int color, QWidget *parent = 0);
+	explicit QtHeader(const QString &text, int color, QWidget *parent = 0);
 };
 
 class QtButton : public QtHeader
@@ -195,7 +198,7 @@ signals:
 	void isOn(bool isOn);
 
 public:
-	QtButton(const QString &off, const QString &on, QWidget *parent = 0, bool resetExternal = false);
+	explicit QtButton(const QString &off, const QString &on, QWidget *parent = 0, bool resetExternal = false);
 	void setOff(bool off = true);
 
 protected:
@@ -207,10 +210,46 @@ private:
 	bool m_isOn;
 };
 
+class QtSlider : public QSlider
+{
+	Q_OBJECT
+
+public:
+	explicit QtSlider(int bgnd, int color, QWidget *parent);
+
+	void setOrientation(Qt::Orientation o);
+	QSize minimumSizehint() const;
+
+protected:
+	int  valueFromPosition(const QPoint &pos) const;
+	bool isOnHandle(const QPoint &pos) const;
+	bool mouseLocked() const { return m_clickSet || m_sliding; }
+
+	void mouseMoveEvent(QMouseEvent *event);
+	void mousePressEvent(QMouseEvent *event);
+	void mouseReleaseEvent(QMouseEvent *event);
+	void keyPressEvent(QKeyEvent *event);
+	void keyReleaseEvent(QKeyEvent *event);
+
+private:
+	bool m_clickSet;
+	bool m_sliding;
+};
+
+class SliderProxyStyle : public QProxyStyle
+{
+public:
+	explicit SliderProxyStyle(QStyle *baseStyle);
+
+	void drawComplexControl(ComplexControl ctrl, const QStyleOptionComplex *opt, QPainter *p, const QWidget *wgt = 0) const;
+	QRect subControlRect(ComplexControl ctrl, const QStyleOptionComplex *opt, SubControl sub, const QWidget *wgt = 0) const;
+	int pixelMetric(PixelMetric pMetric, const QStyleOption *opt = 0, const QWidget *wgt = 0) const;
+};
+
 class QtAtomicInt : public QAtomicInt
 {
 public:
-	QtAtomicInt() { }
+	explicit QtAtomicInt() { }
 	void operator =(int value)
 	{
 		QAtomicInt::operator=(value);
@@ -297,12 +336,13 @@ protected slots:
 	void end();
 	void message();
 
+	void cores(int value);
 	void setup(int option);
 	void disable(bool disable = true);
 
 protected:
 	void createUi();
-	void createAddons(QBoxLayout *&lyt);
+	void createConfig(QBoxLayout *&lyt);
 	void createCfgOpt(QBoxLayout * lyt);
 	void createBldOpt(QBoxLayout * lyt);
 	void createAppOpt(QBoxLayout * lyt);
@@ -358,6 +398,7 @@ private:
 	DiskSpaceBar *m_tgt;
 	DiskSpaceBar *m_tmp;
 	Selections *m_sel;
+	QtSlider *m_cct;
 	QtAppLog *m_log;
 	BuildLog *m_bld;
 	QtButton *m_go;
@@ -374,10 +415,12 @@ private:
 	QStringList m_dirFilter;
 	QStringList m_extFilter;
 
+	Modes m_confs;
 	Modes m_msvcs;
 	Modes m_archs;
 	Modes m_types;
 
+	uint m_coreCount;
 	uint m_imdiskUnit;
 	bool m_keepDisk;
 
@@ -400,8 +443,8 @@ public:
 
 	inline bool normalExit() const { return m_cancelled || exitCode() ==  NormalExit; }
 
-public slots:
-	void itStheEndOfTheWorldAsWeKnowIt();
+protected slots:
+	void checkQuit();
 
 private:
 	QtBuilder *m_bld;

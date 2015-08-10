@@ -48,18 +48,24 @@ void QtBuilder::setup() /// primary setup for the current build run!!!
 
 	m_msvcs.insert(MSVC2010, false);			// ... default build requests...
 	m_msvcs.insert(MSVC2012, false);
-	m_msvcs.insert(MSVC2013, false);
+	m_msvcs.insert(MSVC2013, true );
 	m_msvcs.insert(MSVC2015, false);
-	m_types.insert(Shared,	 false);
-	m_types.insert(Static,	 false);
-	m_archs.insert(X86,		 false);
-	m_archs.insert(X64,		 false);
+
+	m_types.insert(Shared,	 true );
+	m_types.insert(Static,	 true );
+
+	m_archs.insert(X86,		 true );
+	m_archs.insert(X64,		 true );
+
+	m_confs.insert(Debug,	 true );
+	m_confs.insert(Release,	 true );
 }
 
 
 
 QtBuilder::QtBuilder(QWidget *parent) : QMainWindow(parent),
-	m_log(NULL), m_cpy(NULL), m_tgt(NULL), m_tmp(NULL), m_imdiskUnit(imdiskUnit), m_keepDisk(false)
+	m_log(NULL), m_cpy(NULL), m_tgt(NULL), m_tmp(NULL), m_keepDisk(false),
+	m_coreCount(qMax(QThread::idealThreadCount()-1,1)), m_imdiskUnit(imdiskUnit)
 {
 	m_state = NotStarted;
 
@@ -89,8 +95,6 @@ void QtBuilder::closeEvent(QCloseEvent *event)
 
 		 cancel();
 		disable();
-
-		m_log->add("Shutting down ...", Warning);
 	}
 	else CALL_QUEUED(this, end);
 }
@@ -132,10 +136,20 @@ void QtBuilder::show()
 	m_tgt->setDrive(tdrive);
 }
 
+void QtBuilder::cores(int value)
+{
+	m_coreCount = value;
+}
+
 void QtBuilder::setup(int option)
 {
 	switch(option)
 	{
+	case Debug:
+	case Release:
+		m_confs[option] = !m_confs[option];
+		break;
+
 	case Shared:
 	case Static:
 		m_types[option] = !m_types[option];
@@ -157,7 +171,9 @@ void QtBuilder::setup(int option)
 
 void QtBuilder::disable(bool disable)
 {
-	m_sel->setDisabled(disable);
+	m_log->add("Shutting down ...", Warning);
+	m_cct->setDisabled(disable);
+	m_sel->disable(disable);
 }
 
 void QtBuilder::cancel()
@@ -176,13 +192,17 @@ void QtBuilder::process(bool start)
 	else if (start)
 	{
 		bool ok = true;
+		ok &= !m_confs.keys(true).isEmpty();
 		ok &= !m_types.keys(true).isEmpty();
 		ok &= !m_archs.keys(true).isEmpty();
 		ok &= !m_msvcs.keys(true).isEmpty();
 
 		m_state = ok ? Started : NotStarted;
 		if (ok)
+		{
 			 m_loop.setFuture(QtConcurrent::run(this, &QtBuilder::loop));
+			 m_cct->setDisabled(true);
+		}
 		else m_go->setOff();
 	}
 }

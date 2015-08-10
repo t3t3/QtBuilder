@@ -60,30 +60,6 @@ QStringList qtBuilderMatchLists(const QStringList &full, const QStringList &part
 	return	result;
 }
 
-QStringList qtBuilderGlobalOpts()
-{
-	QStringList global;
-	if (globals.contains		(_dbAndRl))
-	{
-		global.append			(_debuglb);
-		global.append			(_release);
-	}
-	else if (globals.contains	(_debuglb))
-	{
-		global.append			(_debuglb);
-		global.append(QString	(_release).replace("-","-no\""));
-	}
-	else if (globals.contains	(_release))
-	{
-		global.append(QString	(_debuglb).replace("-","-no\""));
-		global.append			(_release);
-	}
-	QStringList  g;
-	FOR_CONST_IT(globalOptions)
-			g.append(QString(*IT).prepend("-no"));
-	return	global+qtBuilderMatchLists(globalOptions, globals, true);
-}
-
 void QtBuilder::createUi()
 {
 	QWidget *wgt = new QWidget(this);
@@ -94,7 +70,7 @@ void QtBuilder::createUi()
 	vlt->setSpacing(0);
 
 	QBoxLayout * lyt = vlt;
-	createAddons(lyt);
+	createConfig(lyt);
 
 	m_log = new QtAppLog(wgt);
 	m_bld = new BuildLog(wgt);
@@ -121,7 +97,7 @@ void QtBuilder::createUi()
 	vlt->setStretch(5, 0);
 }
 
-void QtBuilder::createAddons(QBoxLayout *&lyt)
+void QtBuilder::createConfig(QBoxLayout *&lyt)
 {
 	QBoxLayout *hlt = new QHBoxLayout();
 	hlt->setContentsMargins(0, 0, 0, 0);
@@ -162,11 +138,11 @@ void QtBuilder::createCfgOpt(QBoxLayout *lyt)
 
 void QtBuilder::createBldOpt(QBoxLayout *lyt)
 {
-	Selections *s = new Selections("BUILD OPTIONS", Elevated, centralWidget());
+	Selections *s = new Selections("OPTIONS", Elevated, centralWidget());
 	s->setDisabled(true);
 	s->setSorting(false);
 
-	s->append(qtBuilderGlobalOpts());
+	s->append(qtBuilderMatchLists(globalSwitches,  globals, true));
 	s->append(qtBuilderMatchLists(compileSwitches, switches));
 	s->append(qtBuilderMatchLists(featureSwitches, features));
 
@@ -176,10 +152,11 @@ void QtBuilder::createBldOpt(QBoxLayout *lyt)
 
 void QtBuilder::createAppOpt(QBoxLayout *lyt)
 {
-	m_sel = new Selections("BUILD REQUESTS", Warning, centralWidget());
+	m_sel = new Selections("BUILDS", Warning, centralWidget());
 	m_sel->setAutoSplit(true);
 	m_sel->setTriState(false);
 
+	m_sel->addModes(m_confs);
 	m_sel->addModes(m_types);
 	m_sel->addModes(m_archs);
 	m_sel->addModes(m_msvcs);
@@ -189,6 +166,14 @@ void QtBuilder::createAppOpt(QBoxLayout *lyt)
 
 	connect(m_sel,	SIGNAL(selected(int)),			 this, SLOT(setup(int)));
 	connect(this,	SIGNAL(current(const Modes &)), m_sel, SLOT(activate(const Modes &)), Qt::QueuedConnection);
+
+	m_cct = new QtSlider(Warning, Critical, m_sel);
+	m_cct->setRange(1,m_coreCount);
+	m_cct->setValue(  m_coreCount);
+	m_cct->setAccessibleName("CORES");
+	m_sel->layout()->addWidget(m_cct);
+
+	connect(m_cct, SIGNAL(valueChanged(int)), this, SLOT(cores(int)));
 
 	m_go = new QtButton("GO", "STOP", m_sel, true);
 	m_sel->layout()->addWidget(m_go);
@@ -239,14 +224,15 @@ void QtButton::setOff(bool off)
 
 
 
-Selections::Selections(const QString &label, int color, QWidget *parent)
-	: QWidget(parent), m_disabled(false), m_sorting(true), m_autoSplit(false), m_triState(true)
+Selections::Selections(const QString &label, int color, QWidget *parent) : QWidget(parent),
+	m_disabled(false), m_sorting(true), m_autoSplit(false), m_triState(true)
 {
-	setStyleSheet("QWidget:disabled { border-right: 1px solid #D8D8D8; }");
+	setObjectName(QString("%1%2").arg(CLASS_NAME(QtBuilder), CLASS_NAME(Selections)));
+	setStyleSheet(QString("%1:disabled { border-right: 1px solid #D8D8D8; }").arg(objectName()));
 	setMinimumWidth(180);
 
 	QFont f(font());
-	f.setPointSize(11);
+	f.setPixelSize(14);
 	setFont(f);
 
 	QVBoxLayout *lyt = new QVBoxLayout(this);
@@ -258,23 +244,11 @@ Selections::Selections(const QString &label, int color, QWidget *parent)
 
 	m_main = new QVBoxLayout();
 	m_main->setContentsMargins(9, 6, 9, 9);
-	m_main->setSpacing(3);
+	m_main->setSpacing(1);
 	lyt->addLayout(m_main);
 
 	m_mapper = new QSignalMapper(this);
 	connect(m_mapper, SIGNAL(mapped(const QString &)), this, SLOT(toggled(const QString &)));
-}
-
-void Selections::addSpacer()
-{
-	QFrame *lne = new QFrame(this);
-	lne->setStyleSheet("QFrame { border-top: 1px solid #A2A2A2; } QFrame:disabled { border-top: 1px solid #CDCDCD;}");
-	lne->setFrameShape(QFrame::NoFrame);
-	lne->setFixedHeight(1);
-
-	m_main->addSpacing(9);
-	m_main->addWidget(lne);
-	m_main->addSpacing(9);
 }
 
 void Selections::addModes(const Modes &modes)
@@ -289,6 +263,18 @@ void Selections::addModes(const Modes &modes)
 		list.append(m);
 	}
 	append(list);
+}
+
+void Selections::addSpacer()
+{
+	QFrame *lne = new QFrame(this);
+	lne->setStyleSheet("QFrame { border-top: 1px solid #A2A2A2; } QFrame:disabled { border-top: 1px solid #CDCDCD;}");
+	lne->setFrameShape(QFrame::NoFrame);
+	lne->setFixedHeight(1);
+
+	m_main->addSpacing(5);
+	m_main->addWidget(lne);
+	m_main->addSpacing(4);
 }
 
 void Selections::create()
@@ -308,7 +294,6 @@ void Selections::create()
 				continue;
 
 			chb = new QCheckBox(label, this);
-			chb->setStyleSheet("QWidget { border: none; }");
 			chb->setFocusPolicy(Qt::NoFocus);
 			chb->setFont(font());
 
@@ -365,6 +350,11 @@ void Selections::activate(const Modes &modes)
 		label = modeLabels.at(IT.key());
 		qobject_cast<QCheckBox *>(m_mapper->mapping(label))->setFont(f);
 	}
+}
+
+void Selections::disable(bool disable)
+{
+	QWidget::setDisabled(disable);
 }
 
 bool Selections::nextCharUppper(const QChar &c) const

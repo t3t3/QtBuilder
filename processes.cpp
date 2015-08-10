@@ -41,7 +41,10 @@ QtProcess::QtProcess(QtBuilder *builder, bool blockOutput) : QProcess(),
 	{
 		connect(this,	SIGNAL(readyReadStandardOutput()), m_bld, SLOT(procOutput()), Qt::BlockingQueuedConnection);
 		connect(this,	SIGNAL(readyReadStandardError()),  m_bld, SLOT(procError()),  Qt::BlockingQueuedConnection);
-	}	connect(m_bld,	SIGNAL(cancelling()),				this, SLOT(itStheEndOfTheWorldAsWeKnowIt()));
+	}
+	{	connect(this,	SIGNAL(readyReadStandardOutput()),	this, SLOT(checkQuit()));
+		connect(this,	SIGNAL(readyReadStandardError()),	this, SLOT(checkQuit()));
+	}
 }
 
 QtProcess::~QtProcess()
@@ -61,50 +64,38 @@ void QtProcess::sendStdErr()
 		CALL_QUEUED(m_bld, procError);
 }
 
-void QtProcess::itStheEndOfTheWorldAsWeKnowIt()
+void QtProcess::checkQuit()
 {
+	if (!m_bld->cancelled())
+		return;
+
 	m_cancelled = true;
-	qDebug()<<"QtProcess::end()";
 	if (state() != Running)
 	{
 		close();
 		return;
 	}
-	qDebug()<<"QtProcess::state()"<<state();
 	for(int i = 0; i < 5; i++)
 	{
 #ifdef _WIN32
 		GenerateConsoleCtrlEvent(0, (DWORD)pid());
-		qDebug()<<pid()<<"QtProcess::SIGINT ";
 		GenerateConsoleCtrlEvent(1, (DWORD)pid());
-		qDebug()<<pid()<<"QtProcess::SIGBREAK";
 #endif
 		if (!waitForFinished(500))
 		{
-			qDebug()<<"QtProcess::closeChannels()";
 			closeWriteChannel();
 			closeReadChannel(StandardError);
 			closeReadChannel(StandardOutput);
 		}
-		if (!waitForFinished(500))
-		{
-			qDebug()<<"Qt terminate running process";
-			terminate();
-		}
-		if (!waitForFinished(500))
-		{
-			qDebug()<<"Qt kill running process";
-			kill();
-		}
+
+		if (!waitForFinished(500)) terminate();
+		if (!waitForFinished(500)) kill();
 	}
-	qDebug()<<"QtProcess::state()"<<state();
 	if (state() == Running)
 	{
 		QProcess p;
 		p.execute(QString("taskkill /PID %1").arg((int)pid()));
-
 		waitForFinished(5000);
-		qDebug()<<pid()<<"Win kill running process";
 	}
 	close();
 }

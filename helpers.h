@@ -37,6 +37,8 @@ const QString PLCHD("%1");
 const QString ___LF("\n");
 const QString __TAB("\t");
 const QString _CRLF("\r\n");
+const qreal  MBYTE  = 1024*1024.0;
+const qint32 QT_MAX_UI = 0xffffff;
 
 const QString Q_SETTINGS_GEOMETRY("WindowGeometry");
 
@@ -99,6 +101,21 @@ const QString Q_SETTINGS_GEOMETRY("WindowGeometry");
 #define CLASS_NAME(CLASS)	 META_OBJECT(##CLASS).className()
 #define MEMBER(NAME)		 #NAME
 
+template <typename T> T Map(const T &val, const T &minIn, const T &maxIn, const T &minOut, const T &maxOut)
+{
+	T	range  = maxIn-minIn;
+	if (range == 0) // note: this only needs to avoid div by zero, thus epsilon doesn't matter!
+		return	 0;
+
+	else if (val <= minIn)
+		return minOut;
+
+	else if (val >= maxIn)
+		return maxOut;
+
+	return minOut+((maxOut-minOut)/range)*(val-minIn);
+}
+
 const QRect centerRect(int percentOfScreen, int screenNbr = -1);
 
 bool getDiskSpace(const QString &anyPath, uint &totalMb, uint &freeMb);
@@ -139,6 +156,4 @@ template<class T> QSignalBlocker<T> SilentCall(T *object)
 {
 	return QSignalBlocker<T>(object);
 }
-
-const qreal MBYTE = 1024*1024.0;
 #endif // HELPERS_H

@@ -28,8 +28,8 @@
 #include <QApplication>
 #include <QUuid>
 
-const bool qtBuilderUseTargets = false;
 const bool qtBuilderConfigOnly = false;
+const bool qtBuilderUseTargets = false;
 
 // ~~thread safe (no mutexes) ...
 void QtBuilder::loop()
@@ -255,6 +255,7 @@ bool QtBuilder::copyTarget()
 		 log("Couldn't copy contents to:", native, Critical);
 
 	QFile(m_build+m_bld->logFile()).copy(m_target+m_bld->logFile());
+	removeDir(m_target+"/%SystemDrive%");
 
 	log("Total files copied:", QString::number(++count));
 	return count;
@@ -276,7 +277,7 @@ bool QtBuilder::prepare(int msvc, int type, int arch)
 	log("Building Qt", text.toUpper(), Elevated);
 	restart();
 
-	if (msBuildTool.contains("jom"))
+	if (msBuildTool.contains("jom", Qt::CaseInsensitive))
 	{	//
 		//	copy jom executable to build root path (from /bin);
 		//	(both simplify calling it, and check for existence)
@@ -339,30 +340,46 @@ bool QtBuilder::confClean()
 // ~~thread safe (no mutexes) ...
 bool QtBuilder::configure(int msvc, int type)
 {
-	log("Build step", "Running configure ...", AppInfo);
+	log("Build step", "Running configure.exe ...", AppInfo);
 
-	QString qtConfig = QString("%1 %2 %3")
+	QStringList c;
+	FOR_CONST_IT(m_confs)
+		if (IT.value()) c.append(qtOpts.value(IT.key()));
+
+	QString qtConfig =c.join("-and");
+	qtConfig += QString(" %1 %2 %3")
 	   .arg(qtOpts.at(msvc), qtOpts.at(type),
 		   (globals+switches+features+plugins+exclude).join(" "));
 
+	if (false)
+	{	BuildProcess proc(this);
+		proc.setArgs(QString("127.0.0.1 -n %1").arg(m_coreCount));
+		proc.start("ping.exe");
+		return proc.result();
+	}
+
 	BuildProcess proc(this);
 	proc.setArgs(qtConfig);
-	proc.start("configure");
-
+	proc.start("configure.exe");
 	return proc.result();
 }
 
 // ~~thread safe (no mutexes) ...
 bool QtBuilder::compiling()
 {
-	log("Build step", "Running jom make ...", AppInfo);
+	log("Build step", QString("Running %1 ...").arg(msBuildTool), AppInfo);
 
 	if (qtBuilderConfigOnly)
 		return true;
 
+	QString args;
+	if (msBuildTool.contains("jom", Qt::CaseInsensitive))
+		args = QString("/J %1 ").arg(m_coreCount);
+
 	if(!qtBuilderUseTargets)
 	{
 		BuildProcess proc(this);
+		proc.setArgs(args);
 		proc.start(msBuildTool);
 		return proc.result();
 	}
@@ -374,7 +391,7 @@ bool QtBuilder::compiling()
 	{
 		if (m_state == Compiling)
 		{	BuildProcess proc(this);
-			proc.setArgs(*IT);
+			proc.setArgs(args+ *IT);
 			proc.start(msBuildTool);
 		if(!proc.result())
 				 return false;
