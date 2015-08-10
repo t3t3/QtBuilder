@@ -26,17 +26,22 @@
 #include "definitions.h"
 
 #include <QMainWindow>
-#include <QBoxLayout>
 #include <QElapsedTimer>
-#include <QTextBrowser>
-#include <QTextEdit>
 #include <QProgressDialog>
 #include <QProgressBar>
+#include <QTextBrowser>
+#include <QTextEdit>
+#include <QBoxLayout>
+#include <QLabel>
 #include <QProcess>
 #include <QSettings>
+#include <QSignalMapper>
 #include <QFutureWatcher>
 #include <QFileInfo>
 #include <QDir>
+
+typedef QMap<int, bool> Modes;
+Q_DECLARE_METATYPE(Modes)
 
 class QtAppLog : public QTextBrowser
 {
@@ -92,7 +97,15 @@ public slots:
 	void setMaximum(int max);
 };
 
-class DiskSpaceBar : public QProgressBar
+class QtProgress : public QProgressBar
+{
+	Q_OBJECT
+
+public:
+	QtProgress(int color, QWidget *parent = 0);
+};
+
+class DiskSpaceBar : public QtProgress
 {
 	Q_OBJECT
 
@@ -114,7 +127,7 @@ private:
 	uint m_diskSpace;
 };
 
-class CopyProgress : public QProgressBar
+class CopyProgress : public QtProgress
 {
 	Q_OBJECT
 
@@ -125,26 +138,151 @@ public slots:
 	void progress(int count, const QString &file, qreal mbs);
 };
 
+class Selections : public QWidget, public QList<QStringList>
+{
+	Q_OBJECT
+
+signals:
+	void selected(int);
+	void checked(bool);
+
+public:
+	Selections(const QString &label, int color, QWidget *parent);
+
+	inline void setDisabled	(bool on) {  m_disabled  = on; }
+	inline void setSorting	(bool on) {  m_sorting   = on; }
+	inline void setAutoSplit(bool on) {  m_autoSplit = on; }
+	inline void setTriState	(bool on) {  m_triState  = on; }
+
+	void addModes(const Modes &modes);
+	void create();
+
+public slots:
+	void activate(const Modes &modes);
+
+protected slots:
+	void toggled(const QString &name);
+
+protected:
+	bool parseOption(const QString &opt, QString &label, Qt::CheckState &state);
+	bool nextCharUppper(const QChar &c) const;
+	void addSpacer();
+
+private:
+	QSignalMapper *m_mapper;
+	QVBoxLayout *m_main;
+
+	bool m_disabled;
+	bool m_sorting;
+	bool m_autoSplit;
+	bool m_triState;
+};
+
+class QtHeader : public QLabel
+{
+	Q_OBJECT
+
+public:
+	QtHeader(const QString &text, int color, QWidget *parent = 0);
+};
+
+class QtButton : public QtHeader
+{
+	Q_OBJECT
+
+signals:
+	void isOn(bool isOn);
+
+public:
+	QtButton(const QString &off, const QString &on, QWidget *parent = 0, bool resetExternal = false);
+	void setOff(bool off = true);
+
+protected:
+	void mouseReleaseEvent(QMouseEvent *event);
+
+private:
+	QStringList m_text;
+	bool m_resetExtern;
+	bool m_isOn;
+};
+
+class QtAtomicInt : public QAtomicInt
+{
+public:
+	QtAtomicInt() { }
+	void operator =(int value)
+	{
+		QAtomicInt::operator=(value);
+	}
+	void operator+=(int value)
+	{
+		QAtomicInt::operator=(*this+value);
+	}
+};
+
 class QtBuilder : public QMainWindow, private QElapsedTimer
 {
 	Q_OBJECT
+	Q_ENUMS(States)
 
 signals:
 	void log(const QString &msg, const QString &text = QString(), int type = Informal);
 	void log(const QString &msg, int type);
 
 	void progress(int count, const QString &file, qreal mbs);
-	void cancelled();
+	void current(const Modes &modes);
+	void cancelling();
 
 public:
 	explicit QtBuilder(QWidget *parent = 0);
 	virtual ~QtBuilder();
 
-	void exec();
+	void show();
 	void setup();
+	void cancel();
 
 	inline const QProcessEnvironment &environment() const { return m_env; }
-	inline const QString			&targetFolder() const { return m_target; }
+	inline const QString &targetFolder() const { return m_target; }
+
+	inline bool ready()		  const { return m_state <  Started;   }
+	inline bool failed()	  const { return m_state  > Cancelled; }
+	inline bool working()	  const { return m_state <  Cancelled && m_state > Started; }
+	inline bool cancelled()	  const { return m_state == Cancelled || m_state == Cancel; }
+	inline int	lastStateId() const { return m_state; }
+	const QString lastState() const;
+
+	enum States
+	{//	Processing...
+		NotStarted		= -1,
+		Started			=  0,
+		CreateTarget	=  1,
+		CopySource		=  2,
+		Prepare			=  3,
+		ConfClean		=  4,
+		Configure		=  5,
+		JomBuild		=  6,
+		JomClean		=  7,
+		Finalize		=  8,
+		CopyTarget		=  9,
+	 //	Results...
+		Finished		= 10,
+		Cancel			= 50,
+		Cancelled		= 51,
+		ErrCheckSource	= 61,
+		ErrCheckTarget	= 62,
+		ErrCreateTemp	= 71,
+		ErrRemoveTemp	= 72,
+		Error			= 80,
+		ErrCreateTarget = 81,
+		ErrCopySource	= 82,
+		ErrPrepare		= 83,
+		ErrConfClean	= 84,
+		ErrConfigure	= 85,
+		ErrJomBuild		= 86,
+		ErrJomClean		= 87,
+		ErrFinalize		= 88,
+		ErrCopyTarget	= 89,
+	};
 
 public slots:
 	void procOutput();
@@ -152,27 +290,35 @@ public slots:
 	void procLog();
 
 protected slots:
+	void process(bool start);
+	void processed();
+
 	void end();
-	void endMessage();
+	void message();
+
+	void setup(int option);
+	void disable(bool disable = true);
 
 protected:
 	void createUi();
 	void createAddons(QBoxLayout *&lyt);
+	void createCfgOpt(QBoxLayout * lyt);
+	void createBldOpt(QBoxLayout * lyt);
+	void createAppOpt(QBoxLayout * lyt);
 
-	bool createTarget(int msvc, int type, int arch);
-	bool createTemp	 ();
-	bool checkSource ();
-	bool copySource	 ();
-	bool copyTarget	 ();
 	bool removeTemp	 ();
+	bool createTemp	 ();
+	bool createTarget(int msvc, int type, int arch);
+	bool copyTarget	 ();
+	bool copySource	 ();
+	bool checkSource ();
 
 	bool prepare	 (int msvc, int type, int arch);
 	bool confClean	 ();
 	bool configure	 (int msvc, int type);
 	bool jomBuild	 ();
 	bool jomClean	 ();
-	bool finished	 ();
-	bool install	 ();
+	bool finalize	 ();
 
 	bool setEnvironment(const QString &vcVars, const QString &mkSpec);
 	void writeQtVars(const QString &path, const QString &vcVars, int msvc);
@@ -183,7 +329,7 @@ protected:
 	bool checkDir(int which, QString &path);
 	bool checkDir(int which, QString &path, int &count, bool skipRootFiles = false);
 
-	void diskOp(int which = -1, bool start = false, int count = 0);
+	void diskOp(int to = -1, bool start = false, int count = 0);
 
 	bool attachImdisk(QString &letter);
 	bool removeImdisk(bool silent, bool force);
@@ -204,29 +350,17 @@ protected:
 
 private:
 	enum Dirs { Source, Target, Build, Temp };
-	enum BuildSteps
-	{
-		Start		 =  0,
-		CreateTarget =  1,
-		CreateTemp	 =  2,
-		CopySource	 =  3,
-		Prepare		 =  4,
-		ConfClean	 =  5,
-		Configure	 =  6,
-		JomBuild	 =  7,
-		JomClean	 =  8,
-		CleanUp		 =  9,
-		CopyTarget	 = 10,
-		Finished	 = 11,
-	};
 
 	QFutureWatcher<void> m_loop;
 	QProcessEnvironment	 m_env;
 	CopyProgress *m_cpy;
 	DiskSpaceBar *m_tgt;
 	DiskSpaceBar *m_tmp;
+	Selections *m_sel;
 	QtAppLog *m_log;
 	BuildLog *m_bld;
+	QtButton *m_go;
+	QMutex m_mutex;
 
 	QString m_drive;
 	QString m_build;
@@ -239,16 +373,14 @@ private:
 	QStringList m_dirFilter;
 	QStringList m_extFilter;
 
-	QList<int> m_msvcs;
-	QList<int> m_archs;
-	QList<int> m_types;
+	Modes m_msvcs;
+	Modes m_archs;
+	Modes m_types;
 
 	uint m_imdiskUnit;
 	bool m_keepDisk;
 
-	volatile int  m_state;
-	volatile bool m_result;
-	volatile bool m_cancelled;
+	QtAtomicInt m_state;
 };
 
 class QtProcess : public QProcess
@@ -265,7 +397,7 @@ public:
 	const QString stdOut() { return readAllStandardOutput(); }
 	const QString stdErr() { return readAllStandardError();  }
 
-	inline bool normalExit() const { return !m_cancelled && exitCode() ==  NormalExit; }
+	inline bool normalExit() const { return m_cancelled || exitCode() ==  NormalExit; }
 
 public slots:
 	void itStheEndOfTheWorldAsWeKnowIt();

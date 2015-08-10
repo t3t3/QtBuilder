@@ -64,33 +64,36 @@ const QString Q_SETTINGS_GEOMETRY("WindowGeometry");
 #define FOR_LT(OBJECT)													\
 	for (auto LT = OBJECT.begin(); LT != OBJECT.end(); ++LT)			\
 
+#define Q_REGISTER_METATYPE( TYPE )										\
+	const int metaTypeIdFor##TYPE = qRegisterMetaType<TYPE>(#TYPE);		\
+
 #define ____EXPAND(X) X // for MSVC2010 compatibility
 #define _PP_SEQ_N() 7, 6, 5, 4, 3, 2, 1, 0
 #define _PP_ARG_N(_1, _2, _3, _4, _5, _6, _7, NAME, ...) NAME
 #define _PP_NARG_(...) ____EXPAND(_PP_ARG_N(__VA_ARGS__))
 #define _PP_N_ARG(...) ____EXPAND(_PP_NARG_(__VA_ARGS__,_PP_SEQ_N()))
 
-#define _CALL_QUEUED_2(_1, _2)						QMetaObject::invokeMethod(_1, #_2, Qt::QueuedConnection)
-#define _CALL_QUEUED_3(_1, _2, _3)					QMetaObject::invokeMethod(_1, #_2, Qt::QueuedConnection, Q_ARG##_3)
-#define _CALL_QUEUED_4(_1, _2, _3, _4)				QMetaObject::invokeMethod(_1, #_2, Qt::QueuedConnection, Q_ARG##_3, Q_ARG##_4)
-#define _CALL_QUEUED_5(_1, _2, _3, _4, _5)			QMetaObject::invokeMethod(_1, #_2, Qt::QueuedConnection, Q_ARG##_3, Q_ARG##_4, Q_ARG##_5)
-#define _CALL_QUEUED_6(_1, _2, _3, _4, _5, _6)		QMetaObject::invokeMethod(_1, #_2, Qt::QueuedConnection, Q_ARG##_3, Q_ARG##_4, Q_ARG##_5, Q_ARG##_6)
-#define _CALL_QUEUED_7(_1, _2, _3, _4, _5, _6, _7)	QMetaObject::invokeMethod(_1, #_2, Qt::QueuedConnection, Q_ARG##_3, Q_ARG##_4, Q_ARG##_5, Q_ARG##_6, Q_ARG##_7)
+#define __QCALLQUE_2(_1, _2)					 QMetaObject::invokeMethod(_1, #_2, Qt::QueuedConnection)
+#define __QCALLQUE_3(_1, _2, _3)				 QMetaObject::invokeMethod(_1, #_2, Qt::QueuedConnection, Q_ARG##_3)
+#define __QCALLQUE_4(_1, _2, _3, _4)			 QMetaObject::invokeMethod(_1, #_2, Qt::QueuedConnection, Q_ARG##_3, Q_ARG##_4)
+#define __QCALLQUE_5(_1, _2, _3, _4, _5)		 QMetaObject::invokeMethod(_1, #_2, Qt::QueuedConnection, Q_ARG##_3, Q_ARG##_4, Q_ARG##_5)
+#define __QCALLQUE_6(_1, _2, _3, _4, _5, _6)	 QMetaObject::invokeMethod(_1, #_2, Qt::QueuedConnection, Q_ARG##_3, Q_ARG##_4, Q_ARG##_5, Q_ARG##_6)
+#define __QCALLQUE_7(_1, _2, _3, _4, _5, _6, _7) QMetaObject::invokeMethod(_1, #_2, Qt::QueuedConnection, Q_ARG##_3, Q_ARG##_4, Q_ARG##_5, Q_ARG##_6, Q_ARG##_7)
 
-#define _CALL_QUEBLK_2(_1, _2)						QMetaObject::invokeMethod(_1, #_2, Qt::BlockingQueuedConnection)
-#define _CALL_QUEBLK_3(_1, _2, _3)					QMetaObject::invokeMethod(_1, #_2, Qt::BlockingQueuedConnection, Q_ARG##_3)
-#define _CALL_QUEBLK_4(_1, _2, _3, _4)				QMetaObject::invokeMethod(_1, #_2, Qt::BlockingQueuedConnection, Q_ARG##_3, Q_ARG##_4)
-#define _CALL_QUEBLK_5(_1, _2, _3, _4, _5)			QMetaObject::invokeMethod(_1, #_2, Qt::BlockingQueuedConnection, Q_ARG##_3, Q_ARG##_4, Q_ARG##_5)
-#define _CALL_QUEBLK_6(_1, _2, _3, _4, _5, _6)		QMetaObject::invokeMethod(_1, #_2, Qt::BlockingQueuedConnection, Q_ARG##_3, Q_ARG##_4, Q_ARG##_5, Q_ARG##_6)
-#define _CALL_QUEBLK_7(_1, _2, _3, _4, _5, _6, _7)	QMetaObject::invokeMethod(_1, #_2, Qt::BlockingQueuedConnection, Q_ARG##_3, Q_ARG##_4, Q_ARG##_5, Q_ARG##_6, Q_ARG##_7)
+#define __QCALLBLK_2(_1, _2)					 QMetaObject::invokeMethod(_1, #_2, Qt::BlockingQueuedConnection)
+#define __QCALLBLK_3(_1, _2, _3)				 QMetaObject::invokeMethod(_1, #_2, Qt::BlockingQueuedConnection, Q_ARG##_3)
+#define __QCALLBLK_4(_1, _2, _3, _4)			 QMetaObject::invokeMethod(_1, #_2, Qt::BlockingQueuedConnection, Q_ARG##_3, Q_ARG##_4)
+#define __QCALLBLK_5(_1, _2, _3, _4, _5)		 QMetaObject::invokeMethod(_1, #_2, Qt::BlockingQueuedConnection, Q_ARG##_3, Q_ARG##_4, Q_ARG##_5)
+#define __QCALLBLK_6(_1, _2, _3, _4, _5, _6)	 QMetaObject::invokeMethod(_1, #_2, Qt::BlockingQueuedConnection, Q_ARG##_3, Q_ARG##_4, Q_ARG##_5, Q_ARG##_6)
+#define __QCALLBLK_7(_1, _2, _3, _4, _5, _6, _7) QMetaObject::invokeMethod(_1, #_2, Qt::BlockingQueuedConnection, Q_ARG##_3, Q_ARG##_4, Q_ARG##_5, Q_ARG##_6, Q_ARG##_7)
 
-#define _CALL_QUEUED_(N)	 _CALL_QUEUED_##N
-#define _CALL_QUEBLK_(N)	 _CALL_QUEBLK_##N
-#define _CALL_QUEUED_EVAL(N) _CALL_QUEUED_(N)
-#define _CALL_QUEBLK_EVAL(N) _CALL_QUEBLK_(N)
+#define __QCALLQUE_(N)	 __QCALLQUE_##N
+#define __QCALLBLK_(N)	 __QCALLBLK_##N
+#define __QCALLQUE_EVAL(N) __QCALLQUE_(N)
+#define __QCALLBLK_EVAL(N) __QCALLBLK_(N)
 
-#define CALL_QUEUED(...) ____EXPAND(_CALL_QUEUED_EVAL(____EXPAND(_PP_N_ARG(__VA_ARGS__)))(__VA_ARGS__))
-#define CALL_QUEBLK(...) ____EXPAND(_CALL_QUEBLK_EVAL(____EXPAND(_PP_N_ARG(__VA_ARGS__)))(__VA_ARGS__))
+#define CALL_QUEUED(...) ____EXPAND(__QCALLQUE_EVAL(____EXPAND(_PP_N_ARG(__VA_ARGS__)))(__VA_ARGS__))
+#define CALL_QUEBLK(...) ____EXPAND(__QCALLBLK_EVAL(____EXPAND(_PP_N_ARG(__VA_ARGS__)))(__VA_ARGS__))
 
 #define META_OBJECT(CLASS)	(##CLASS::staticMetaObject)
 #define CLASS_NAME(CLASS)	 META_OBJECT(##CLASS).className()
@@ -105,6 +108,37 @@ bool unmountFolder(const QString &path, QString &error = QString());
 bool mountFolder(const QString &srcDrive, const QString &tgtPath, QString &error = QString());
 const QString getValueFrom(const QString &string, const QString &inTag, const QString &outTag);
 const QString getLastWinError();
+
+template<class T> class QSignalBlocker
+{
+public:
+	explicit QSignalBlocker(T *object)
+		: m_object(object) {}
+
+	T *operator->()
+	{
+		 if (m_object)
+		 {
+			 m_wasBlocked = m_object->signalsBlocked();
+			 m_object->blockSignals(true);
+		 }
+		 return m_object;
+	}
+	~QSignalBlocker()
+	{
+		if (m_object)
+			m_object->blockSignals(m_wasBlocked);
+	}
+
+private:
+	T *m_object;
+	bool m_wasBlocked;
+};
+
+template<class T> QSignalBlocker<T> SilentCall(T *object)
+{
+	return QSignalBlocker<T>(object);
+}
 
 const qreal MBYTE = 1024*1024.0;
 #endif // HELPERS_H

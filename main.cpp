@@ -4,7 +4,7 @@
 
 int main(int argc, char *argv[])
 {
-	QString app_version = QString("%1.%2.%3")
+	QString app_version = QString("%1.%2.%3.%4")
 	   .arg(APP_VERSION_MAJOR)
 	   .arg(APP_VERSION_MINOR)
 	   .arg(APP_VERSION_REVSN)
@@ -19,7 +19,7 @@ int main(int argc, char *argv[])
 	a.setQuitOnLastWindowClosed(false);
 
 	QtBuilder builder;
-	  builder.exec();
+	  builder.show();
 			a.exec();
 	return	a.property("result").toInt();
 }

@@ -5,121 +5,129 @@
 // user config section...
 //
 const QString vcInst("D:/BIZ/MICROSOFT/" ); // TODO: replace by querying the registry!
+
 const QString vc2010("Visual Studio 2010");
 const QString vc2012("Visual Studio 2012");
 const QString vc2013("Visual Studio 2013");
 const QString vc2015("Visual Studio 2015");
 
-const QStringList global = QStringList()	<<
-	"-debug-and-release"					<<
-	"-confirm-license"						<<
-	"-opensource"							<<
-	"-ltcg"									<<
-	"-mp"									<<
-	"-mmx"									<<
-	"-sse"									<<
-	"-sse2"									<<
-	"-3dnow"								;
+const QString _dbAndRl("-debug-and-release");
+const QString _debuglb("-debug");
+const QString _release("-release");
 
-const QStringList plugins = QStringList()	<<
-	"-qt-zlib"								<<
-	"-qt-libjpeg"							<<
-	"-qt-libtiff"							<<
-	"-qt-libmng"							<<
-	"-qt-libpng"							<<
-	"-qt-sql-sqlite"						<<
-	"-qt-style-windowsvista"				;
-
-const QStringList exclude = QStringList()	<<
-	"-audio-backend"						<<
-	"-multimedia"							<<
-	"-no-accessibility"						<<
-	"-no-dbus"								<<
-	"-no-declarative"						<<
-	"-no-neon"								<<
-	"-no-openvg"							<<
-	"-no-openssl"							<<
-	"-no-phonon"							<<
-	"-no-phonon-backend"					<<
-	"-no-qt3support"						<<
-	"-no-script"							<<
-	"-no-scripttools"						<<
-	"-no-webkit"							<<
-	"-nomake demos"							<<
-	"-nomake docs"							<<
-	"-nomake examples"						<<
-	"-nomake tools"							<<
-	"-nomake translations"					;
-
-const QStringList sfilter = QStringList()	<<
-	"/demos"								<<
-	"/doc"									<<
-	"/examples"								; // all lower case!
-
-const QStringList tfilter = QStringList()	<<
-	"/activeqt"								<<
-	"/dbus"									<<
-	"/docs"									<<
-	"/generated"							<<
-	"/javascript"							<<
-	"/openvg"								<<
-	"/phonon"								<<
-	"/qdoc3"								<<
-	"/qt3support"							<<
-	"/scripttools"							<<
-	"/translations"							<<
-	"/webkit"								<<
-	"/config.profiles"						<<
-	"/config.tests"							<<
-	"/imports"								<<
-	"/tmp"									<<
-	"/%SystemDrive%"						; // all lower case!
-
-const QStringList ffilter = QStringList()	<<
-	"dll"									<<
-	"lib"									<<
-	"pdb"									<<
-	"prl"									; // all lower case!
-
-const QStringList cfilter = QStringList()	<<
-	"c"										<<
-	"cpp"									; // all lower case!
-
-const QStringList targets = QStringList()	<<
-	"sub-tools-bootstrap"					<<
-	"sub-moc"								<<
-	"sub-rcc"								<<
-	"sub-uic"								<<
-	"sub-winmain"							<<
-	"sub-corelib"							<<
-	"sub-xml"								<<
-	"sub-network"							<<
-	"sub-sql"								<<
-/*	"sub-testlib"							<< */
-	"sub-gui"								<<
-/*	"sub-qt3support"						<< */
-/*	"sub-uic3"								<< */
-	"sub-idc"								<<
-/*	"sub-activeqt"							<< */
-	"sub-opengl"							<<
-/*	"sub-xmlpatterns"						<< */
-/*	"sub-phonon"							<< */
-	"sub-multimedia"						<<
-	"sub-svg"								<<
-/*	"sub-script"							<< */
-/*	"sub-declarative"						<< */
-/*	"sub-webkit"							<< */
-/*	"sub-scripttools"						<< */
-	"sub-plugins"							;
-/*	"sub-imports"							<< */
-/*	"sub-tools"								<< */
-/*	"sub-translations"						<< */
-/*	"sub-examples"							<< */
-/*	"sub-demos"								<< */
+const QStringList globals = QStringList()
+	<< _dbAndRl
+	<< "-confirm-license"
+	<< "-opensource"
+;
+const QStringList switches = QStringList()
+	<< "-mp"
+	<< "-ltcg"
+;
+const QStringList features = QStringList()
+	<< "-3dnow"
+	<< "-mmx"
+	<< "-sse"
+	<< "-sse2"
+;
+const QStringList plugins = QStringList()
+	<< "-qt-zlib"
+	<< "-qt-libjpeg"
+	<< "-qt-libtiff"
+	<< "-qt-libmng"
+	<< "-qt-libpng"
+	<< "-qt-sql-sqlite"
+	<< "-qt-style-windowsvista"
+;
+const QStringList exclude = QStringList()
+	<< "-no-accessibility"
+	<< "-no-dbus"
+	<< "-no-declarative"
+	<< "-no-neon"
+	<< "-no-openvg"
+	<< "-no-openssl"
+	<< "-no-phonon"
+	<< "-no-phonon-backend"
+	<< "-no-qt3support"
+	<< "-no-script"
+	<< "-no-scripttools"
+	<< "-no-webkit"
+	<< "-nomake demos"
+	<< "-nomake docs"
+	<< "-nomake examples"
+	<< "-nomake tools"
+	<< "-nomake translations"
+;
+const QStringList sfilter = QStringList() /* lower case! */
+	<< "/demos"
+	<< "/doc"
+	<< "/examples"
+;
+const QStringList tfilter = QStringList() /* lower case! */
+	<< "/activeqt"
+	<< "/dbus"
+	<< "/docs"
+	<< "/generated"
+	<< "/javascript"
+	<< "/openvg"
+	<< "/phonon"
+	<< "/qdoc3"
+	<< "/qt3support"
+	<< "/scripttools"
+	<< "/translations"
+	<< "/webkit"
+	<< "/config.profiles"
+	<< "/config.tests"
+	<< "/imports"
+	<< "/tmp"
+	<< "/%systemdrive%"
+;
+const QStringList ffilter = QStringList() /* lower case! */
+	<< "dll"
+	<< "lib"
+	<< "pdb"
+	<< "prl"
+;
+const QStringList cfilter = QStringList() /* lower case! */
+	<< "c"
+	<< "cpp"
+;
+const QStringList targets = QStringList()
+	<< "sub-tools-bootstrap"
+	<< "sub-moc"
+	<< "sub-rcc"
+	<< "sub-uic"
+	<< "sub-winmain"
+	<< "sub-corelib"
+	<< "sub-xml"
+	<< "sub-network"
+	<< "sub-sql"
+/*	<< "sub-testlib"		*/
+	<< "sub-gui"
+/*	<< "sub-qt3support"		*/
+/*	<< "sub-uic3"			*/
+	<< "sub-idc"
+/*	<< "sub-activeqt"		*/
+	<< "sub-opengl"
+/*	<< "sub-xmlpatterns"	*/
+/*	<< "sub-phonon"			*/
+	<< "sub-multimedia"
+	<< "sub-svg"
+/*	<< "sub-script"			*/
+/*	<< "sub-declarative"	*/
+/*	<< "sub-webkit"			*/
+/*	<< "sub-scripttools"	*/
+	<< "sub-plugins"
+/*	<< "sub-imports"		*/
+/*	<< "sub-tools"			*/
+/*	<< "sub-translations"	*/
+/*	<< "sub-examples"		*/
+/*	<< "sub-demos"			*/
+;
 //
 // persistent configs...
 //
-enum Modes
+enum Mode
 {
 	X86,
 	X64,
@@ -130,58 +138,75 @@ enum Modes
 	Static,
 	Shared
 };
+
 const QString vc2010Inst(vcInst+vc2010); // TODO: replace by querying the registry!
 const QString vc2012Inst(vcInst+vc2012);
 const QString vc2013Inst(vcInst+vc2013);
 const QString vc2015Inst(vcInst+vc2015);
 
-const QStringList paths	 = QStringList() << "Win32"
-										 << "x64"
-										 << "v100"
-										 << "v110"
-										 << "v120"
-										 << "v130"
-										 << "static"
-										 << "shared";
-
-const QStringList builds = QStringList() << "x86"
-										 << "amd64"
-										 << vc2010Inst
-										 << vc2012Inst
-										 << vc2013Inst
-										 << vc2015Inst
-										 << ""
-										 << "";
-
-const QStringList qMakeS = QStringList() << ""
-										 << ""
-										 << "win32-msvc2010"
-										 << "win32-msvc2012"
-										 << "win32-msvc2013"
-										 << "win32-msvc2015"
-										 << ""
-										 << "";
-
-const QStringList qtOpts = QStringList() << ""
-										 << ""
-										 << QString("-platform %1").arg(qMakeS.at(MSVC2010))
-										 << QString("-platform %1").arg(qMakeS.at(MSVC2012))
-										 << QString("-platform %1").arg(qMakeS.at(MSVC2013))
-										 << QString("-platform %1").arg(qMakeS.at(MSVC2015))
-										 << "-static"
-										 << "-shared";
-
-const QStringList colors = QStringList() << "#60BF4D"	/* AppInfo	*/
-										 << "#C558E0"	/* Elevated	*/
-										 << "#EBA421"	/* Explicit	*/
-										 << "#EBA421"	/* Warning	*/
-										 << "#DB4242"	/* Critical */
-										 << "#418ECC";	/* Informal	*/
+const QStringList modeLabels = QStringList()
+	<< "Windows (Win32)"
+	<< "Windows (x64)"
+	<< "Visual Studio 2010"
+	<< "Visual Studio 2012"
+	<< "Visual Studio 2013"
+	<< "Visual Studio 2015"
+	<< "Static Build"
+	<< "Shared Build"
+;
+const QStringList bPaths = QStringList()
+	<< "Win32"
+	<< "x64"
+	<< "v100"
+	<< "v110"
+	<< "v120"
+	<< "v130"
+	<< "static"
+	<< "shared"
+;
+const QStringList builds = QStringList()
+	<< "x86"
+	<< "amd64"
+	<< vc2010Inst
+	<< vc2012Inst
+	<< vc2013Inst
+	<< vc2015Inst
+	<< ""
+	<< ""
+;
+const QStringList qMakeS = QStringList()
+	<< ""
+	<< ""
+	<< "win32-msvc2010"
+	<< "win32-msvc2012"
+	<< "win32-msvc2013"
+	<< "win32-msvc2015"
+	<< ""
+	<< ""
+;
+const QStringList qtOpts = QStringList()
+	<< ""
+	<< ""
+	<< QString("-platform %1").arg(qMakeS.at(MSVC2010))
+	<< QString("-platform %1").arg(qMakeS.at(MSVC2012))
+	<< QString("-platform %1").arg(qMakeS.at(MSVC2013))
+	<< QString("-platform %1").arg(qMakeS.at(MSVC2015))
+	<< "-static"
+	<< "-shared"
+;
+const QStringList colors = QStringList()
+	<< "#60BF4D"	/* AppInfo	*/
+	<< "#C558E0"	/* Elevated	*/
+	<< "#418ECC"	/* Explicit	*/
+	<< "#EBA421"	/* Warning	*/
+	<< "#DB4242"	/* Critical */
+	<< "#555853"	/* Informal	*/
+;
 enum MessageType
 {
 	AppInfo = 0,
 	Elevated,
-	Explicit,
+	Process,
 	Warning,
 	Critical,
 	Informal,
@@ -194,6 +219,52 @@ const QString imdiskLetter("Drive letter:");
 const QString imdiskSizeSt("Size:");
 const int imdiskUnit = 16841 ;
 const int defGuiHeight = 28;
+
+const QStringList globalOptions = QStringList()
+	<< "-opensource"
+	<< "-commercial"
+	<< "-developer-build"
+;
+const QStringList compileSwitches = QStringList() /* with or without "-no" prefix */
+	<< "-mp"
+	<< "-ltcg"
+	<< "-fast"
+	<< "-dsp"
+	<< "-vcproj"
+	<< "-plugin-manifests"
+	<< "-process"
+	<< "-incredibuild-xge"
+/*	<< "-qmake" ... no chance to build from source without qmake! */
+;
+const QStringList featureSwitches = QStringList() /* with or without "-no" prefix */
+	<< "-exceptions"
+	<< "-stl"
+	<< "-rtti"
+	<< "-mmx"
+	<< "-3dnow"
+	<< "-sse"
+	<< "-sse2"
+;
+const QStringList targetSwitches = QStringList() /* with or without "-no" prefix */
+/*	<< "-declarative-debug"	... dependency needed */
+	<< "-accessibility"
+	<< "-openssl"
+/*	<< "-openssl-linked"	... dependency needed */
+	<< "-dbus"
+/*	<< "-dbus-linked"		... dependency needed */
+	<< "-webkit"
+/*	<< "-webkit-debug"		... dependency needed */
+	<< "-phonon"
+	<< "-phonon-backend"
+	<< "-multimedia"
+	<< "-audio-backend"
+	<< "-openvg"
+	<< "-script"
+	<< "-scripttools"
+	<< "-declarative"
+	<< "-native-gestures"
+	<< "-system-proxies"
+;
 /*
 -release
 -debug
@@ -213,19 +284,19 @@ const int defGuiHeight = 28;
 -process			-dont-process
 -incredibuild-xge	-no-incredibuild-xge
 
--qt-zlib							-system-zlib
-					-no-gif
--qt-libpng			-no-libpng		-system-libpng
--qt-libmng			-no-libmng		-system-libmng
--qt-libtiff			-no-libtiff		-system-libtiff
--qt-libjpeg			-no-libjpeg		-system-libjpeg
-
 -stl				-no-stl
 -rtti				-no-rtti
 -mmx				-no-mmx
 -3dnow				-no-3dnow
 -sse				-no-sse
 -sse2				-no-sse2
+
+-qt-zlib							-system-zlib
+					-no-gif
+-qt-libpng			-no-libpng		-system-libpng
+-qt-libmng			-no-libmng		-system-libmng
+-qt-libtiff			-no-libtiff		-system-libtiff
+-qt-libjpeg			-no-libjpeg		-system-libjpeg
 
 					-no-qt3support
 -opengl <api>		-no-opengl

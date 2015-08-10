@@ -26,8 +26,7 @@
 #include <stdlib.h>
 
 #include <QApplication>
-#include <QCheckBox>
-#include <QLabel>
+#include <QMetaEnum>
 #include <QCloseEvent>
 #include <QtConcurrentRun>
 #include <QMessageBox>
@@ -35,30 +34,42 @@
 #include <QDateTime>
 #include <QQueue>
 
-const int	  qtBuilderRamDiskInGB =  3;		// ... ram disk size in gigabyte - needs imdisk installed: http://www.ltr-data.se/opencode.html/#ImDisk
+const int	  qtBuilderRamDiskInGB =  4;		// ... ram disk size in gigabyte - needs imdisk installed: http://www.ltr-data.se/opencode.html/#ImDisk
 const QString qtBuilderStaticDrive = "";//Y";	// ... use an existing drive letter; the ram disk part is skipped when set to anything else but ""; left-over build garbage will not get removed!
 const QStringList  qtBuilderQtDirs = QStringList() << "";	// ... override detection from registry!
 
 void QtBuilder::setup() /// primary setup for the current build run!!!
 {
+	QMutexLocker locker(&m_mutex);
+
 //	m_version = "4.8.7";						// ... source version for the current run; needs a valid install of an according msvc qt setup;
-	m_version = "D:/BIZ/Qt/4.8.7_src";			// ... passing a full path to an install instead will override detection from registry entries. ... TODO ...
+	m_version = "D:/BIZ/Qt/4.8.7_src";			// ... passing a full path to a src path instead will override detection from registry entries.
 	m_libPath = "E:/WORK/PROG/LIBS/Qt";			// ... target path for creating the misc libs subdirs; different from the qt install location!!
 
-	m_msvcs << MSVC2013;						// << MSVC2010 << MSVC2012 << MSVC2013 << MSVC2015;
-	m_archs << X64;						// << X86 << X64;
-	m_types << Shared;					// << Shared << Static;
+	m_msvcs.insert(MSVC2010, false);			// ... default build requests...
+	m_msvcs.insert(MSVC2012, false);
+	m_msvcs.insert(MSVC2013, false);
+	m_msvcs.insert(MSVC2015, false);
+	m_types.insert(Shared,	 false);
+	m_types.insert(Static,	 false);
+	m_archs.insert(X86,		 false);
+	m_archs.insert(X64,		 false);
 }
 
 
 
 QtBuilder::QtBuilder(QWidget *parent) : QMainWindow(parent),
-	m_log(NULL), m_cpy(NULL), m_tgt(NULL), m_tmp(NULL), m_state(Start),
-	m_cancelled(false), m_result(true), m_imdiskUnit(imdiskUnit), m_keepDisk(false)
+	m_log(NULL), m_cpy(NULL), m_tgt(NULL), m_tmp(NULL), m_imdiskUnit(imdiskUnit), m_keepDisk(false)
 {
+	m_state = NotStarted;
+
 	setWindowIcon(QIcon(":/graphics/icon.png"));
 	setWindowTitle(qApp->applicationName());
+
+	setup();
 	createUi();
+
+	connect(&m_loop, SIGNAL(finished()), this, SLOT(processed()));
 }
 
 QtBuilder::~QtBuilder()
@@ -67,18 +78,161 @@ QtBuilder::~QtBuilder()
 
 void QtBuilder::closeEvent(QCloseEvent *event)
 {
-	m_cancelled   = true;
-	if ( m_state != Finished )
-		 m_state  = Finished;
-	else m_cancelled = false;
-	if ( m_cancelled )
-		disconnect(&m_loop, 0, this,0);
-
 	event->setAccepted(false);
-	CALL_QUEUED(this, end);
 
-	if (m_cancelled)
-		emit cancelled();
+	if (working())
+	{
+		QMutexLocker locker(&m_mutex); // ... avoid watcher "finished" during signal reconnection!
+
+		disconnect(&m_loop, 0,					this, 0);
+		   connect(&m_loop, SIGNAL(finished()), this, SLOT(end()));
+
+		 cancel();
+		disable();
+
+		m_log->add("Shutting down ...", Warning);
+	}
+	else CALL_QUEUED(this, end);
+}
+
+void QtBuilder::end()
+{
+	QSettings().setValue(Q_SETTINGS_GEOMETRY, saveGeometry());
+	qApp->setProperty("result", (int)m_state);
+
+	hide();
+	qApp->quit();
+}
+
+void QtBuilder::show()
+{
+	QSettings  s;
+	QByteArray g = s.value(Q_SETTINGS_GEOMETRY).toByteArray();
+	if (!g.isEmpty())
+		 restoreGeometry(g);
+	else setGeometry(centerRect(25));
+
+	QMainWindow::show();
+
+	m_log->addSeparator();
+	m_log->add("QtBuilder started", AppInfo);
+
+	QString tdrive = m_libPath.left(3);
+	if (!QDir(tdrive).exists())
+	{
+		log("Target drive doesn't exist:", QDir::toNativeSeparators(tdrive), Critical);
+		disable();
+		return;
+	}
+	if (!checkSource())
+	{
+		disable();
+		return;
+	}
+	m_tgt->setDrive(tdrive);
+}
+
+void QtBuilder::setup(int option)
+{
+	switch(option)
+	{
+	case Shared:
+	case Static:
+		m_types[option] = !m_types[option];
+		break;
+
+	case X86:
+	case X64:
+		m_archs[option] = !m_archs[option];
+		break;
+
+	case MSVC2010:
+	case MSVC2012:
+	case MSVC2013:
+	case MSVC2015:
+		m_msvcs[option] = !m_msvcs[option];
+		break;
+	}
+}
+
+void QtBuilder::disable(bool disable)
+{
+	m_sel->setDisabled(disable);
+}
+
+void QtBuilder::cancel()
+{
+	m_state = Cancel;
+	emit cancelling();
+}
+
+void QtBuilder::process(bool start)
+{
+	if (working())
+	{
+		 cancel();
+		disable();
+	}
+	else if (start)
+	{
+		bool ok = true;
+		ok &= !m_types.keys(true).isEmpty();
+		ok &= !m_archs.keys(true).isEmpty();
+		ok &= !m_msvcs.keys(true).isEmpty();
+
+		m_state = ok ? Started : NotStarted;
+		if (ok)
+			 m_loop.setFuture(QtConcurrent::run(this, &QtBuilder::loop));
+		else m_go->setOff();
+	}
+}
+
+void QtBuilder::processed()
+{
+	QString msg("QtBuilder ended with:");
+	if (failed())
+	{
+		QString errn = PLCHD.arg(m_state,4,10,FILLNUL);
+		QString text = QString("Error %2 (%3)\r\n").arg(errn, lastState());
+
+		m_bld->endFailure();
+		m_log->add(msg, text.toUpper(), Elevated);
+	}
+	else if (cancelled())
+	{
+		m_bld->endFailure();
+		m_log->add("QtBuilder was cancelled.", Warning);
+	}
+	else
+	{
+		m_bld->endSuccess();
+		m_log->add(msg, QString("No Errors\r\n").toUpper(), AppInfo);
+	}
+
+	message();
+	disable(false);
+	m_go->setOff();
+}
+
+void QtBuilder::message()
+{
+	QString msg;
+	if	 (cancelled())	msg = "<b>Process forcefully cancelled!</b>";
+	else if (failed())	msg = "<b>Process ended with errors!</b>";
+	else				msg = "<b>Process sucessfully completed.</b>";
+
+	QString url("<br/><a href=\"file:///%1\">Open app log file</a>");
+	msg +=  url.arg(QDir::toNativeSeparators(m_log->logFile()));
+
+	if (failed())
+	{
+		QString url("<br/><a href=\"file:///%1\">Open last buil log</a>");
+		msg +=  url.arg(QDir::toNativeSeparators(m_build+m_bld->logFile()));
+	}
+
+	QMessageBox b(this);
+	b.setText(msg);
+	b.exec();
 }
 
 void QtBuilder::procLog()
@@ -91,7 +245,7 @@ void QtBuilder::procLog()
 void QtBuilder::procError()
 {
 	if (QtProcess *p = qobject_cast<QtProcess *>(sender()))
-		m_log->add("Process message", QtAppLog::clean(p->stdErr(), true), Elevated);
+		m_log->add("Process message", QtAppLog::clean(p->stdErr(), true), Process);
 }
 
 void QtBuilder::procOutput()
@@ -101,340 +255,23 @@ void QtBuilder::procOutput()
 }
 
 // ~~thread safe (no mutexes) ...
-const QString QtBuilder::targetDir(int msvc, int arch, int type, QString &native, QStringList &t)
-{
-	m_libPath = QDir::cleanPath(m_libPath);
-	//
-	//	USER_SET_LIB_PATH	...	something like				"D:\3d-Party\Qt"
-	//	  \VERSION			... currently processed version	i.e. "4.8.7"
-	//	    \TYPE			...	library type:				"shared" or "static"
-	//	      \ARCHITECTURE	... MSVC $(Platform) compatible	"Win32" or "x64"
-	//	        \MSVC_VER	...	MSVC $(PlatformToolset)		"v100" or "v110" or "v120" or "v130"
-	//
-	t.clear();
-	t.append(m_libPath);
-	t.append(m_version);
-	t.append(paths[type]);
-	t.append(paths[arch]);
-	t.append(paths[msvc]);
-
-	QString target = t.join(SLASH);
-			native = QDir::toNativeSeparators(target);
-	return	target;
-}
-
-// ~~thread safe (no mutexes) ...
-const QString QtBuilder::driveLetter()
-{
-	QFileInfoList drives = QDir::drives();
-	QStringList aToZ;
-
-	int a = (int)QChar('A').toLatin1();
-	int z = (int)QChar('Z').toLatin1();
-	for(int i = a; i <= z; i++)
-		aToZ.append(QChar::fromLatin1(i));
-
-	FOR_CONST_IT(drives)
-		aToZ.removeOne((*IT).absolutePath().left(1).toUpper());
-	if (aToZ.isEmpty())
-		return QString();
-
-	return aToZ.last();
-}
-
-// ~~thread safe (no mutexes) ...
-bool QtBuilder::qtSettings(QStringList &versions, QString &instDir)
-{
-	if (m_version.isEmpty())
-	{
-		log("No Qt version given", Elevated);
-		return false;
-	}
-	versions+= "HKEY_CURRENT_USER\\Software\\Trolltech\\Versions\\%1";
-	versions+= "HKEY_CURRENT_USER\\Software\\Digia\\Versions\\%1";
-	instDir  = "InstallDir";
-	return true;
-}
-
-// ~~thread safe (no mutexes) ...
-void QtBuilder::registerQtVersion()
-{
-	return; // a) not working, b) not useful in particular for having Qt Creator showing the new versions
-
-	QStringList versions;
-	QString version, instDir;
-	if (!qtSettings(versions, instDir))
-		return;
-
-	FOR_CONST_IT(versions)
-	{
-		QString native = QDir::toNativeSeparators(m_target);
-		QString name = QString(m_target).remove(m_libPath+SLASH).replace(SLASH,"-");
-
-		  version = (*IT).arg(name);
-		QSettings s(version);
-		qDebug() << version;
-
-		if (s.isWritable())
-		{	s.setValue(instDir, native);
-			s.sync();
-		if (s.value(instDir).toString() == native)
-			return;
-		}
-		log("Couldn't register Qt in:", version+QString(": REG_SZ\"%1\"").arg(instDir), Elevated);
-	}
-}
-
-void QtBuilder::exec()
-{
-	QSettings  s;
-	QByteArray g = s.value(Q_SETTINGS_GEOMETRY).toByteArray();
-	if (!g.isEmpty())
-		 restoreGeometry(g);
-	else setGeometry(centerRect(25));
-
-	setup();
-	show();
-
-	m_log->addSeparator();
-	m_log->add("QtBuilder started", AppInfo);
-
-	if (!(m_result = checkSource()))
-	{
-		CALL_QUEUED(this, end);
-		return;
-	}
-
-	connect(&m_loop, SIGNAL(finished()), this, SLOT(close()));
-	m_loop.setFuture(QtConcurrent::run(this, &QtBuilder::loop));
-}
-
-void QtBuilder::end()
-{
-	qDebug()<<"RESULT"<<m_result<<"CANCELLED"<<m_cancelled;
-	bool error = !m_result || m_cancelled;
-	m_log->add("QtBuilder ended with", QString(error?"%1":"no %1").arg("errors\r\n").toUpper(), AppInfo);
-
-	m_cpy->hide();
-	m_tgt->show();
-	m_tmp->show();
-
-	if (error)	m_bld->endFailure();
-	else		m_bld->endSuccess();
-
-	QSettings().setValue(Q_SETTINGS_GEOMETRY, saveGeometry());
-	qApp->setProperty("result", error);
-	endMessage();
-
-	if (m_cancelled)
-	{
-		setDisabled(true);
-		m_log->add("Shutting down ...", Warning);
-	}
-	else
-	{
-		hide();
-		qApp->quit();
-	}
-}
-
-void QtBuilder::endMessage()
-{
-	QString msg = !m_result ? m_cancelled ?
-		"<b>Process forcefully cancelled!</b>"	:
-		"<b>Process ended with errors!</b>"		:
-		"<b>Process sucessfully completed.</b>" ;
-
-	QString url("<br/><a href=\"file:///%1\">Open app log file</a>");
-	msg +=  url.arg(QDir::toNativeSeparators(m_log->logFile()));
-
-	if (!m_result)
-	{
-		QString url("<br/><a href=\"file:///%1\">Open last buil log</a>");
-		msg +=  url.arg(QDir::toNativeSeparators(m_build+m_bld->logFile()));
-	}
-
-	QMessageBox b(this);
-	b.setText(msg);
-	b.exec();
-}
-
-void QtBuilder::createUi()
-{
-	QWidget *wgt = new QWidget(this);
-	setCentralWidget(wgt);
-
-	QVBoxLayout *vlt = new QVBoxLayout(wgt);
-	vlt->setContentsMargins(0, 0, 0, 0);
-	vlt->setSpacing(0);
-
-	QBoxLayout *lyt = vlt;
-	createAddons(lyt);
-
-	{	m_log = new QtAppLog(wgt);
-		lyt->addWidget(m_log);
-
-		connect(this, SIGNAL(log(const QString &, const QString &, int)), m_log, SLOT(add(const QString &, const QString &, int)),	Qt::BlockingQueuedConnection);
-		connect(this, SIGNAL(log(const QString &, int)),				  m_log, SLOT(add(const QString &, int)),					Qt::BlockingQueuedConnection);
-	}
-	{	m_bld = new BuildLog(wgt);
-		vlt->addWidget(m_bld);
-	}
-	{	m_tmp = new DiskSpaceBar("Build ", Informal, wgt);
-		vlt->addWidget(m_tmp);
-
-		connect(this, SIGNAL(progress(int, const QString &, qreal)), m_tmp, SLOT(refresh()), Qt::QueuedConnection);
-	}
-	{	m_cpy = new CopyProgress(wgt);
-		vlt->addWidget(m_cpy);
-
-		connect(this, SIGNAL(progress(int, const QString &, qreal)), m_cpy, SLOT(progress(int, const QString &, qreal)), Qt::QueuedConnection);
-	}
-	{	m_tgt = new DiskSpaceBar("Target", Elevated, wgt);
-		vlt->addWidget(m_tgt);
-
-		connect(this, SIGNAL(progress(int, const QString &, qreal)), m_tgt, SLOT(refresh()), Qt::QueuedConnection);
-	}
-	vlt->setStretch(0, 2);
-	vlt->setStretch(1, 3);
-	vlt->setStretch(3, 0);
-	vlt->setStretch(4, 0);
-	vlt->setStretch(5, 0);
-}
-
-bool qtBuilderParseOption(const QString &opt, QString &name, bool &isOn)
-{
-	name = opt;
-	isOn = true;
-
-	if (name.startsWith("-nomake"))
-	{
-		isOn = false;
-		name.remove("-nomake");
-	}
-	else if (name.startsWith("-no"))
-	{
-		isOn = false;
-		name.remove("-no");
-	}
-	if (!name.isEmpty())
-	{
-		name.replace("-"," ").trimmed();
-		name.prepend(" ");
-
-		int spc = 0;
-		while((spc = name.indexOf(" ", spc)) != -1)
-			name[++spc] = name[spc].toUpper();
-
-		 return true;
-	}
-	else return false;
-}
-
-const QString qtBuilderHeaderStyle("QLabel { background: %1; color: white;} QLabel:disabled { background: #363636; color: #969696; border-right: 1px solid #565656; }");
-
-void QtBuilder::createAddons(QBoxLayout *&lyt)
-{
-	QFont f(font());
-	f.setPointSize(11);
-
-	QBoxLayout *hlt = new QHBoxLayout();
-	hlt->setContentsMargins(0, 0, 0, 0);
-	hlt->setSpacing(0);
-	lyt->addLayout(hlt);
-
-	QWidget *wgt = new QWidget(lyt->parentWidget());
-	wgt->setStyleSheet("QWidget:disabled { border-right: 1px solid #D8D8D8; }");
-	hlt->addWidget(wgt);
-
-	QVBoxLayout *vlt = new QVBoxLayout(wgt);
-	vlt->setContentsMargins(0, 0, 0, 0);
-	vlt->setSpacing(0);
-
-	QLabel *lbl = new QLabel("OPTIONS", wgt);
-	lbl->setStyleSheet(qtBuilderHeaderStyle.arg(colors.at(Warning)));
-	lbl->setAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
-	lbl->setFixedHeight(defGuiHeight);
-	lbl->setFont(f);
-	vlt->addWidget(lbl);
-
-	lyt = new QVBoxLayout();
-	lyt->setContentsMargins(9, 6, 9, 9);
-	lyt->setSpacing(3);
-	vlt->addLayout(lyt);
-
-	QList<QStringList> l;
-	l.append(exclude);
-	l.append(plugins);
-
-	FOR_CONST_IT(l)
-	{
-		if (IT != l.constBegin())
-		{
-			QFrame *lne = new QFrame(wgt);
-			lne->setStyleSheet("QFrame { border-top: 1px solid #A2A2A2; } QFrame:disabled { border-top: 1px solid #CDCDCD;}");
-			lne->setFrameShape(QFrame::NoFrame);
-			lne->setFixedHeight(1);
-			lyt->addSpacing(6);
-			lyt->addWidget(lne);
-			lyt->addSpacing(6);
-		}
-
-		QMap<QString, bool> map;
-		QString name;
-
-		FOR_CONST_JT((*IT))
-		{
-			bool isOn;
-			if (qtBuilderParseOption(*JT, name, isOn))
-				map.insert(name, isOn);
-		}
-
-		QCheckBox *chb;
-		FOR_CONST_JT(map)
-		{
-			chb = new QCheckBox(JT.key(), wgt);
-			chb->setStyleSheet("QWidget { border: none; }");
-			chb->setChecked(JT.value());
-			chb->setDisabled(true);
-			chb->setFont(f);
-			lyt->addWidget(chb);
-		}
-	}
-	vlt->addItem(new QSpacerItem(0, 0, QSizePolicy::Fixed, QSizePolicy::Expanding));
-
-	lyt = new QVBoxLayout();
-	lyt->setContentsMargins(0, 0, 0, 0);
-	lyt->setSpacing(0);
-	hlt->addLayout(lyt);
-
-	lbl = new QLabel("BUILD PROGRESS LOG", lyt->parentWidget());
-	lbl->setStyleSheet(qtBuilderHeaderStyle.arg(colors.at(AppInfo)));
-	lbl->setAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
-	lbl->setFixedHeight(defGuiHeight);
-	lbl->setFont(f);
-	lyt->addWidget(lbl);
-}
-
-// ~~thread safe (no mutexes) ...
-void QtBuilder::diskOp(int which, bool start, int count)
+void QtBuilder::diskOp(int to, bool start, int count)
 {
 	if (start)
 	{
-		switch(which)
+		switch(to)
 		{
-		case Build:  CALL_QUEUED(m_tmp, hide); break;
-		case Target: CALL_QUEUED(m_tgt, hide); break;
+		case Build:  CALL_QUEBLK(m_tgt, hide); break;
+		case Target: CALL_QUEBLK(m_tmp, hide); break;
 		}
 
-		CALL_QUEUED(m_cpy, setMaximum, (int, count));
-		CALL_QUEUED(m_cpy, show);
+		CALL_QUEBLK(m_cpy, setMaximum, (int, count));
 	}
 	else
 	{
-		CALL_QUEUED(m_cpy, hide);
-		CALL_QUEUED(m_tmp, show);
-		CALL_QUEUED(m_tgt, show);
+		CALL_QUEBLK(m_cpy, hide);
+		CALL_QUEBLK(m_tmp, show);
+		CALL_QUEBLK(m_tgt, show);
 	}
 }
 
@@ -469,7 +306,7 @@ bool QtBuilder::checkSource()
 		{	QDir  d = QDir(dir);
 			if ( !d.exists())
 			{
-				log("Qt install path not on disk:", QDir::toNativeSeparators(m_source), Elevated);
+				log("Qt install path not on disk:", QDir::toNativeSeparators(m_source), Critical);
 				return false;
 			}
 
@@ -590,8 +427,8 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 
 	while(!queue.isEmpty())
 	{
-		if (m_cancelled)
-			goto error;
+		if (cancelled())
+			goto end;
 
 		pair = queue.dequeue();
 		srcDir = pair.first;
@@ -620,8 +457,8 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 		}
 		else FOR_CONST_IT(sinfo)
 		{
-			if (m_cancelled)
-				goto error;
+			if (cancelled())
+				goto end;
 
 			src = *IT;
 			nme = src.fileName();
@@ -637,9 +474,7 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 				log("Path length exceeded", nat, Elevated);
 				goto error;
 			}
-			else if (!m_cancelled)
-			{
-				count++;
+			{	count++;
 				mb +=src.size()/MBYTE;
 				quint64 e = elapsed();
 
@@ -677,8 +512,8 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 			dinfo = desDir.entryInfoList(QDir::Files);
 			FOR_CONST_IT(dinfo)
 			{
-				if (m_cancelled)
-					goto error;
+				if (cancelled())
+					goto end;
 
 				des = *IT;
 				if (!compare.contains(des.fileName()) &&
@@ -697,8 +532,8 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 
 		FOR_CONST_IT(sinfo)
 		{
-			if (m_cancelled)
-				goto error;
+			if (cancelled())
+				goto end;
 
 			srcDir = (*IT).absoluteFilePath();
 			nme = srcDir.dirName();
@@ -713,8 +548,8 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 			dinfo = desDir.entryInfoList(QDir::AllDirs | QDir::NoDotAndDotDot);
 			FOR_CONST_IT(dinfo)
 			{
-				if (m_cancelled)
-					goto error;
+				if (cancelled())
+					goto end;
 
 				des = *IT;
 				if (!compare.contains(des.fileName()) &&
@@ -881,3 +716,97 @@ bool QtBuilder::filterExt(const QFileInfo &info)
 {
 	return m_extFilter.contains(info.suffix().toLower());
 }
+
+// ~~thread safe (no mutexes) ...
+const QString QtBuilder::targetDir(int msvc, int arch, int type, QString &native, QStringList &t)
+{
+	m_libPath = QDir::cleanPath(m_libPath);
+	//
+	//	USER_SET_LIB_PATH	...	something like				"D:\3d-Party\Qt"
+	//	  \VERSION			... currently processed version	i.e. "4.8.7"
+	//	    \TYPE			...	library type:				"shared" or "static"
+	//	      \ARCHITECTURE	... MSVC $(Platform) compatible	"Win32" or "x64"
+	//	        \MSVC_VER	...	MSVC $(PlatformToolset)		"v100" or "v110" or "v120" or "v130"
+	//
+	t.clear();
+	t.append(m_libPath);
+	t.append(m_version);
+	t.append(bPaths[type]);
+	t.append(bPaths[arch]);
+	t.append(bPaths[msvc]);
+
+	QString target = t.join(SLASH);
+			native = QDir::toNativeSeparators(target);
+	return	target;
+}
+
+// ~~thread safe (no mutexes) ...
+const QString QtBuilder::driveLetter()
+{
+	QFileInfoList drives = QDir::drives();
+	QStringList aToZ;
+
+	int a = (int)QChar('A').toLatin1();
+	int z = (int)QChar('Z').toLatin1();
+	for(int i = a; i <= z; i++)
+		aToZ.append(QChar::fromLatin1(i));
+
+	FOR_CONST_IT(drives)
+		aToZ.removeOne((*IT).absolutePath().left(1).toUpper());
+	if (aToZ.isEmpty())
+		return QString();
+
+	return aToZ.last();
+}
+
+// ~~thread safe (no mutexes) ...
+bool QtBuilder::qtSettings(QStringList &versions, QString &instDir)
+{
+	if (m_version.isEmpty())
+	{
+		log("No Qt version given", Elevated);
+		return false;
+	}
+	versions+= "HKEY_CURRENT_USER\\Software\\Trolltech\\Versions\\%1";
+	versions+= "HKEY_CURRENT_USER\\Software\\Digia\\Versions\\%1";
+	instDir  = "InstallDir";
+	return true;
+}
+
+// ~~thread safe (no mutexes) ...
+void QtBuilder::registerQtVersion()
+{
+	return; // a) not working, b) not useful in particular for having Qt Creator showing the new versions
+
+	QStringList versions;
+	QString version, instDir;
+	if (!qtSettings(versions, instDir))
+		return;
+
+	FOR_CONST_IT(versions)
+	{
+		QString native = QDir::toNativeSeparators(m_target);
+		QString name = QString(m_target).remove(m_libPath+SLASH).replace(SLASH,"-");
+
+		  version = (*IT).arg(name);
+		QSettings s(version);
+		qDebug() << version;
+
+		if (s.isWritable())
+		{	s.setValue(instDir, native);
+			s.sync();
+		if (s.value(instDir).toString() == native)
+			return;
+		}
+		log("Couldn't register Qt in:", version+QString(": REG_SZ\"%1\"").arg(instDir), Elevated);
+	}
+}
+
+const QString QtBuilder::lastState() const
+{
+	int index = metaObject()->indexOfEnumerator("States");
+	QMetaEnum metaEnum = metaObject()->enumerator(index);
+	return metaEnum.key(m_state);
+}
+
+Q_REGISTER_METATYPE(Modes)

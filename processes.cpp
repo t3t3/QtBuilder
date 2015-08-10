@@ -41,7 +41,7 @@ QtProcess::QtProcess(QtBuilder *builder, bool blockOutput) : QProcess(),
 	{
 		connect(this,	SIGNAL(readyReadStandardOutput()), m_bld, SLOT(procOutput()), Qt::BlockingQueuedConnection);
 		connect(this,	SIGNAL(readyReadStandardError()),  m_bld, SLOT(procError()),  Qt::BlockingQueuedConnection);
-	}	connect(m_bld,	SIGNAL(cancelled()),				this, SLOT(itStheEndOfTheWorldAsWeKnowIt()));
+	}	connect(m_bld,	SIGNAL(cancelling()),				this, SLOT(itStheEndOfTheWorldAsWeKnowIt()));
 }
 
 QtProcess::~QtProcess()

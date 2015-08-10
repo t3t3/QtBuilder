@@ -61,40 +61,12 @@ const QString qtBuilderProgressStyle("QProgressBar { border: none; color: white;
 const QString qtBuilderProgressTempl(" %1 MB/s ... %2");
 const QString qtBuilderDiskSpaceTmpl("  %1 disk usage: %2 GB /%3%");
 
-CopyProgress::CopyProgress(QWidget *parent) : QProgressBar(parent)
+QtProgress::QtProgress(int color, QWidget *parent) : QProgressBar(parent)
 {
 	setStyleSheet(qtBuilderProgressStyle);
 	setStyle(new QMotifStyle());
 	setFocusPolicy(Qt::NoFocus);
 	setFixedHeight(defGuiHeight);
-	hide();
-
-	QPalette p(palette());
-	p.setColor(QPalette::Highlight, colors.at(Critical));
-	setPalette(p);
-
-	QFont f(font());
-	f.setPixelSize(12);
-	f.setFamily("Consolas");
-	setFont(f);
-}
-
-void CopyProgress::progress(int count, const QString &file, qreal mbs)
-{
-	QString text = qtBuilderProgressTempl.arg(mbs,6,FMT_F,2,FILLSPC).arg(file);
-
-	setValue(count);
-	setFormat(text);
-}
-
-DiskSpaceBar::DiskSpaceBar(const QString &name, int color, QWidget *parent) : QProgressBar(parent),
-	m_diskSpace(0), m_name(name)
-{
-	setStyleSheet(qtBuilderProgressStyle);
-	setStyle(new QMotifStyle());
-	setFocusPolicy(Qt::NoFocus);
-	setFixedHeight(defGuiHeight);
-	QProgressBar::hide();
 
 	QPalette p(palette());
 	p.setColor(QPalette::Highlight, colors.at(color));
@@ -105,6 +77,28 @@ DiskSpaceBar::DiskSpaceBar(const QString &name, int color, QWidget *parent) : QP
 	f.setPixelSize(12);
 	f.setFamily("Consolas");
 	setFont(f);
+
+	hide();
+}
+
+CopyProgress::CopyProgress(QWidget *parent) : QtProgress(Critical, parent)
+{
+}
+
+void CopyProgress::progress(int count, const QString &file, qreal mbs)
+{
+	if (count && !isVisible())
+		show();
+
+	QString text = qtBuilderProgressTempl.arg(mbs,6,FMT_F,2,FILLSPC).arg(file);
+
+	setValue(count);
+	setFormat(text);
+}
+
+DiskSpaceBar::DiskSpaceBar(const QString &name, int color, QWidget *parent) : QtProgress(color, parent),
+	m_diskSpace(0), m_name(name)
+{
 }
 
 void DiskSpaceBar::showEvent(QShowEvent *event)
@@ -165,11 +159,11 @@ QtAppLog::QtAppLog(QWidget *parent) : QTextBrowser(parent)
 	setMinimumWidth(640);
 
 	m_info.insert(AppInfo,	"AppInfo ");
-	m_info.insert(Elevated,	"Elevated");
-	m_info.insert(Explicit,	"Explicit");
+	m_info.insert(Process,	"Process ");
 	m_info.insert(Warning,	"Warning ");
-	m_info.insert(Critical,	"Critical");
 	m_info.insert(Informal,	"Informal");
+	m_info.insert(Elevated,	"Elevated");
+	m_info.insert(Critical,	"Critical");
 }
 
 const QString QtAppLog::logFile()
@@ -246,7 +240,7 @@ void QtAppLog::add(const QString &msg, const QString &text, int type)
 	setText(h);
 	scrollToAnchor("end");
 
-	if (type == Explicit)
+	if (type == Process)
 		if (int len = qMax(0, 30-msg.length()))
 			message += QString(" %1 ").arg(QString("*").repeated(len));
 

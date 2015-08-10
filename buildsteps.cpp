@@ -30,84 +30,65 @@
 // ~~thread safe (no mutexes) ...
 void QtBuilder::loop()
 {
-	if (!(m_result = createTemp()))
+	if (!createTemp())
+	{
+		m_state = ErrCreateTemp;
 		return;
+	}
+
+	Modes m;
+	m.unite(m_msvcs);
+	m.unite(m_archs);
+	m.unite(m_types);
+	FOR_IT(m)IT.value()=0;
 
 	int msvc, arch, type;
-	FOR_CONST_IT(m_msvcs)
-	FOR_CONST_JT(m_archs)
 	FOR_CONST_KT(m_types)
+	FOR_CONST_JT(m_archs)
+	FOR_CONST_IT(m_msvcs)
 	{
-		msvc = *IT;
-		arch = *JT;
-		type = *KT;
+		if (!IT.value()||!JT.value()||!KT.value())
+			continue;
+
+		msvc = IT.key();
+		arch = JT.key();
+		type = KT.key();
+
+		m[msvc]=m[arch]=m[type]=true;
+		emit current(m);
 
 		m_target.clear();
 		CALL_QUEUED(m_bld, clear);
 		CALL_QUEUED(m_tmp, reset);
 
-		for	  (m_state = CreateTarget;
+		for	  (m_state;
 			   m_state < Finished;
-			   m_state++)
-		switch(m_state	)
+			   m_state+= 1)
+		switch(m_state)
 		{
-		case CreateTarget:
-		{	if(!(m_result = createTarget(msvc, type, arch)))
-				 m_state  = Finished;
-		}	break;
-
-		case CreateTemp:
-		{	if(!(m_result = createTemp()))
-				 m_state  = Finished;
-		}	break;
-
-		case CopySource:
-		{	if(!(m_result = copySource()))
-				 m_state  = Finished;
-		}	break;
-
-		case Prepare:
-		{	if(!(m_result = prepare(msvc, type, arch)))
-				 m_state  = Finished;
-		}	break;
-
-		case ConfClean:
-		{	if(!(m_result = confClean()))
-				 m_state  = Finished;
-		}	break;
-
-		case Configure:
-		{	if(!(m_result = configure(msvc, type)))
-				 m_state  = Finished;
-		}	break;
-
-		case JomBuild:
-		{	if(!(m_result = jomBuild()))
-				 m_state  = Finished;
-		}	break;
-
-		case JomClean:
-		{	if(!(m_result = jomClean()))
-				 m_state  = Finished;
-		}	break;
-
-		case CleanUp:
-		{	if(!(m_result = finished()))
-				 m_state  = Finished;
-		}	break;
-
-		case CopyTarget:
-		{	if(!(m_result = copyTarget()))
-				 m_state  = Finished;
-		}	break;
+		case CreateTarget:	if (!createTarget(msvc,type,arch)) m_state+= Error; break;
+		case CopySource:	if (!copySource	 ()				 ) m_state+= Error; break;
+		case Prepare:		if (!prepare	 (msvc,type,arch)) m_state+= Error; break;
+		case ConfClean:		if (!confClean	 ()				 ) m_state+= Error; break;
+		case Configure:		if (!configure	 (msvc,type)	 ) m_state+= Error; break;
+		case JomBuild:		if (!jomBuild	 ()				 ) m_state+= Error; break;
+		case JomClean:		if (!jomClean	 ()				 ) m_state+= Error; break;
+		case Finalize:		if (!finalize	 ()				 ) m_state+= Error; break;
+		case CopyTarget:	if (!copyTarget	 ()				 ) m_state+= Error; break;
+		default:															 continue;
 		}
 
-		if (!m_result)
+		m[msvc]=m[arch]=m[type]=false;
+		if (m_state > Finished)
 			goto end;
 	}
 
 	end:
-	m_result = removeTemp();
+	emit current(m);
+	if (!removeTemp())
+		m_state = ErrRemoveTemp;
+
+	QMutexLocker locker(&m_mutex); // ... avoid watcher "finished" during close event signal reconnection!
 }
 
 // ~~thread safe (no mutexes) ...
@@ -150,6 +131,16 @@ bool QtBuilder::createTemp()
 
 	CALL_QUEUED(m_tmp, setDrive, (QString, m_build));
 	return true;
+}
+
+// ~~thread safe (no mutexes) ...
+bool QtBuilder::removeTemp()
+{
+	if (m_keepDisk)
+		return true;
+
+	log("Build step", "Removing temp infrastructure ...", AppInfo);
+	return removeImdisk(false, false);
 }
 
 // ~~thread safe (no mutexes) ...
@@ -200,8 +191,6 @@ bool QtBuilder::createTarget(int msvc, int type, int arch)
 	{
 		log("Target directory mounted:", QString("%1 -> %2").arg(bldNat, tgtNat));
 	}
-
-	CALL_QUEUED(m_tgt, setDrive, (QString, m_target));
 	return true;
 }
 
@@ -213,7 +202,6 @@ bool QtBuilder::copySource()
 
 	m_dirFilter = sfilter;
 	m_extFilter = ffilter;
-	m_cancelled = false;
 
 	log("Copying contents to:", native);
 
@@ -222,8 +210,7 @@ bool QtBuilder::copySource()
 		 log("Couldn't copy contents to:", native, Critical);
 
 	log("Total files copied:", QString::number(count));
-
-	return count && !m_cancelled;
+	return count;
 }
 
 // ~~thread safe (no mutexes) ...
@@ -249,7 +236,6 @@ bool QtBuilder::copyTarget()
 
 	m_dirFilter = sfilter+tfilter;
 	m_extFilter	= cfilter;
-	m_cancelled = false;
 
 	log("Copying contents to:", native);
 
@@ -257,10 +243,10 @@ bool QtBuilder::copyTarget()
 	if(!(count = copyFolder(Build, Target, false, true)))
 		 log("Couldn't copy contents to:", native, Critical);
 
-	log("Total files copied:", QString::number(++count));
-
 	QFile(m_build+m_bld->logFile()).copy(m_target+m_bld->logFile());
-	return count && !m_cancelled;
+
+	log("Total files copied:", QString::number(++count));
+	return count;
 }
 
 // ~~thread safe (no mutexes) ...
@@ -276,7 +262,7 @@ bool QtBuilder::prepare(int msvc, int type, int arch)
 	QString text = QString("<b>Version %1 ... %2 ... %3 bits ... %4</b>");
 	text = text.arg(m_version, type==Shared?"shared":"static", arch==X86 ?"32":"64", makeSpec);
 
-	log("Building Qt", text.toUpper(), Explicit);
+	log("Building Qt", text.toUpper(), Elevated);
 	restart();
 	//
 	//	copy jom executable to build root path (from /bin);
@@ -312,7 +298,7 @@ bool QtBuilder::prepare(int msvc, int type, int arch)
 	bool result = true;
 	if(!(result = setEnvironment(vcVars, makeSpec)))
 	{
-		finished();
+		finalize();
 		return false;
 	}
 
@@ -343,13 +329,14 @@ bool QtBuilder::configure(int msvc, int type)
 	log("Build step", "Running configure ...", AppInfo);
 
 	QString qtConfig = QString("%1 %2 %3")
-	   .arg(qtOpts.at(msvc), qtOpts.at(type), (global+plugins+exclude).join(" "));
+	   .arg(qtOpts.at(msvc), qtOpts.at(type),
+		   (globals+switches+features+plugins+exclude).join(" "));
 
 	BuildProcess proc(this);
 	proc.setArgs(qtConfig);
 	proc.start("configure.exe");
 
-	return proc.result() &&  m_state == Configure;
+	return proc.result();
 }
 
 // ~~thread safe (no mutexes) ...
@@ -368,15 +355,18 @@ bool QtBuilder::jomBuild()
 			proc.start("jom.exe");
 		if(!proc.result())
 				 return false;
-		}	else return false;
-	}
-	return m_state == JomBuild;
+		}	else return true;
+	}	// note: if state was set to cancelled during processing, the local result is still "true" (since there was no process error!)
+	return true;
 }
 
 // ~~thread safe (no mutexes) ...
 bool QtBuilder::jomClean()
 {
 return true;
+// TODO: check if "clean" is actually needed; since the build folder is now synchronised
+// it would be only needed, if the target copy still contains garbage...
+//
 	log("Build step", "Running jom clean ...", AppInfo);
 
 	BuildProcess proc(this, true);
@@ -386,11 +376,11 @@ return true;
 	if (!proc.result())
 	{	 proc.sendStdErr();
 		return false;
-	}	return m_state == JomClean;
+	}	return true;
 }
 
 // ~~thread safe (no mutexes) ...
-bool QtBuilder::finished()
+bool QtBuilder::finalize()
 {
 	QLocale l(QLocale::English);
 	QString mbts = l.toString(m_tmp->maxUsed());
@@ -398,12 +388,11 @@ bool QtBuilder::finished()
 	uint secs = elapsed()/1000;
 	uint mins = secs/60;
 	text = text.arg(mins).arg(secs%mins,2,10,FILLNUL).arg(mbts);
-	log("Qt build done", text.toUpper(), Explicit);
+	log("Qt build done", text.toUpper(), Elevated);
 
-	registerQtVersion();
 	QFile(m_target+"/jom.exe"  ).remove();
-
-	return m_state == CleanUp;
+	registerQtVersion();
+	return true;
 }
 
 // ~~thread safe (no mutexes) ...
@@ -566,14 +555,4 @@ void QtBuilder::writeQtVars(const QString &path, const QString &vcVars, int msvc
 	var += QString(":ENDVSSTART\r\n"								);
 
 	writeTextFile(path+qtVar, var);
-}
-
-// ~~thread safe (no mutexes) ...
-bool QtBuilder::removeTemp()
-{
-	if (m_keepDisk)
-		return true;
-
-	log("Build step", "Removing temp infrastructure ...", AppInfo);
-	return removeImdisk(false, false);
 }
