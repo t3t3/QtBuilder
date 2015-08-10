@@ -261,8 +261,8 @@ public:
 		Prepare			=  3,
 		ConfClean		=  4,
 		Configure		=  5,
-		JomBuild		=  6,
-		JomClean		=  7,
+		Compiling		=  6,
+		Cleaning		=  7,
 		Finalize		=  8,
 		CopyTarget		=  9,
 	 //	Results...
@@ -279,8 +279,8 @@ public:
 		ErrPrepare		= 83,
 		ErrConfClean	= 84,
 		ErrConfigure	= 85,
-		ErrJomBuild		= 86,
-		ErrJomClean		= 87,
+		ErrCompiling	= 86,
+		ErrCleaning		= 87,
 		ErrFinalize		= 88,
 		ErrCopyTarget	= 89,
 	};
@@ -317,8 +317,8 @@ protected:
 	bool prepare	 (int msvc, int type, int arch);
 	bool confClean	 ();
 	bool configure	 (int msvc, int type);
-	bool jomBuild	 ();
-	bool jomClean	 ();
+	bool compiling	 ();
+	bool cleaning	 ();
 	bool finalize	 ();
 
 	bool setEnvironment(const QString &vcVars, const QString &mkSpec);

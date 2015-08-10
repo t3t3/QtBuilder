@@ -23,11 +23,13 @@
 */
 #include "qtbuilder.h"
 #include "helpers.h"
+#include "qmath.h"
 
 #include <QApplication>
 #include <QUuid>
 
 const bool qtBuilderUseTargets = false;
+const bool qtBuilderConfigOnly = true;
 
 // ~~thread safe (no mutexes) ...
 void QtBuilder::loop()
@@ -73,8 +75,8 @@ void QtBuilder::loop()
 		case Prepare:		if (!prepare	 (msvc,type,arch)) m_state+= Error; break;
 		case ConfClean:		if (!confClean	 ()				 ) m_state+= Error; break;
 		case Configure:		if (!configure	 (msvc,type)	 ) m_state+= Error; break;
-		case JomBuild:		if (!jomBuild	 ()				 ) m_state+= Error; break;
-		case JomClean:		if (!jomClean	 ()				 ) m_state+= Error; break;
+		case Compiling:		if (!compiling	 ()				 ) m_state+= Error; break;
+		case Cleaning:		if (!cleaning	 ()				 ) m_state+= Error; break;
 		case Finalize:		if (!finalize	 ()				 ) m_state+= Error; break;
 		case CopyTarget:	if (!copyTarget	 ()				 ) m_state+= Error; break;
 		default:															 continue;
@@ -82,7 +84,8 @@ void QtBuilder::loop()
 
 		m[msvc]=m[arch]=m[type]=false;
 		if (m_state > Finished)
-			goto end;
+			 goto end;
+		else m_state = Started;
 	}
 
 	end:
@@ -154,8 +157,11 @@ bool QtBuilder::createTarget(int msvc, int type, int arch)
 	m_target = targetDir(msvc, arch, type, tgtNat, tp);
 
 	log("Build step", "Creating target folder ...", AppInfo);
+	bool exists = false;
 
-	bool exists;
+	if (qtBuilderConfigOnly)
+		return true;
+
 	tp.removeLast();
 	QString mp = tp.join(SLASH);
 
@@ -221,6 +227,9 @@ bool QtBuilder::copyTarget()
 	log("Build step", "Copying target files ...", AppInfo);
 	QString native = QDir::toNativeSeparators(m_target);
 
+	if (qtBuilderConfigOnly)
+		return true;
+
 	if (!removeSymlink(m_target))
 	{
 		log("Couldn't unmount folder:", QString("%1 -> %2")
@@ -234,7 +243,7 @@ bool QtBuilder::copyTarget()
 	}
 
 	log("Activating file compression:", native, Warning);
-	InlineProcess(this, "compact.exe", QString("/c /i %1").arg(native));
+	InlineProcess(this, "compact", QString("/c /i %1").arg(native));
 
 	m_dirFilter = sfilter+tfilter;
 	m_extFilter	= cfilter;
@@ -266,22 +275,24 @@ bool QtBuilder::prepare(int msvc, int type, int arch)
 
 	log("Building Qt", text.toUpper(), Elevated);
 	restart();
-	//
-	//	copy jom executable to build root path (from /bin);
-	//	(both simplify calling it, and check for existence)
-	//
-	{	QString j=m_source+"/bin";
-		QFile jom(j+"/jom.exe");
-		if (!jom.exists())
+
+	if (msBuildTool.contains("jom"))
+	{	//
+		//	copy jom executable to build root path (from /bin);
+		//	(both simplify calling it, and check for existence)
+		//
+		QString b = m_source+"/bin";
+		QFile bld(b+SLASH+msBuildTool);
+		if ( !bld.exists() )
 		{
-			log("Missing jom.exe from:", QDir::toNativeSeparators(j), Critical);
+			log(QString("Missing %1 from:").arg(msBuildTool), QDir::toNativeSeparators(b), Critical);
 			return false;
 		}
 		else
 		{
-			j = m_build+"/jom.exe";
-			jom.copy(j);
-			jom.setFileName(j);
+			b = m_build+SLASH+msBuildTool;
+			bld.copy(b);
+			bld.setFileName(b);
 		}
 	}
 
@@ -314,13 +325,13 @@ bool QtBuilder::confClean()
 	if (!QFileInfo(m_build+"/Makefile").exists())
 		return true;
 
-	log("Build step", "Running jom confclean ...", AppInfo);
+	log("Build step", QString("Running %1 confclean ...").arg(msBuildTool), AppInfo);
 
 	BuildProcess proc(this, true);
 	proc.setArgs("confclean");
 
 	if	(  !proc.result()  )
-			proc.start("jom.exe");
+			proc.start(msBuildTool);
 	return	proc.result() || true;
 	// ... seems to be better to not use confclean results, i.e. if the prev. build was messed up.
 }
@@ -336,20 +347,24 @@ bool QtBuilder::configure(int msvc, int type)
 
 	BuildProcess proc(this);
 	proc.setArgs(qtConfig);
-	proc.start("configure.exe");
+//	proc.start("configure");
+	proc.start("pause");
 
 	return proc.result();
 }
 
 // ~~thread safe (no mutexes) ...
-bool QtBuilder::jomBuild()
+bool QtBuilder::compiling()
 {
 	log("Build step", "Running jom make ...", AppInfo);
 
-	if (!qtBuilderUseTargets)
+	if (qtBuilderConfigOnly)
+		return true;
+
+	if(!qtBuilderUseTargets)
 	{
-		BuildProcess proc(this, true);
-		proc.start("jom.exe");
+		BuildProcess proc(this);
+		proc.start(msBuildTool);
 		return proc.result();
 	}
 	//
@@ -358,10 +373,10 @@ bool QtBuilder::jomBuild()
 	//
 	FOR_CONST_IT(targets)
 	{
-		if (m_state == JomBuild)
+		if (m_state == Compiling)
 		{	BuildProcess proc(this);
 			proc.setArgs(*IT);
-			proc.start("jom.exe");
+			proc.start(msBuildTool);
 		if(!proc.result())
 				 return false;
 		}	else return true;
@@ -370,17 +385,17 @@ bool QtBuilder::jomBuild()
 }
 
 // ~~thread safe (no mutexes) ...
-bool QtBuilder::jomClean()
+bool QtBuilder::cleaning()
 {
 return true;
 // TODO: check if "clean" is actually needed; since the build folder is now synchronised
 // it would be only needed, if the target copy still contains garbage...
 //
-	log("Build step", "Running jom clean ...", AppInfo);
+	log("Build step", QString("Running %1 clean ...").arg(msBuildTool), AppInfo);
 
 	BuildProcess proc(this, true);
 	proc.setArgs("clean");
-	proc.start("jom.exe");
+	proc.start(msBuildTool);
 
 	if (!proc.result())
 	{	 proc.sendStdErr();
@@ -395,11 +410,11 @@ bool QtBuilder::finalize()
 	QString mbts = l.toString(m_tmp->maxUsed());
 	QString text = QString("<b>Time ... %1:%2 minutes ... %3 MB max. used temp disk space</b>");
 	uint secs = elapsed()/1000;
-	uint mins = secs/60;
-	text = text.arg(mins).arg(secs%mins,2,10,FILLNUL).arg(mbts);
+	uint mins = qFloor(secs/60);
+	text = text.arg(mins).arg(secs%qMax(1U,mins),2,10,FILLNUL).arg(mbts);
 	log("Qt build done", text.toUpper(), Elevated);
 
-	QFile(m_target+"/jom.exe"  ).remove();
+	QFile(m_target+SLASH+msBuildTool).remove();
 	registerQtVersion();
 	return true;
 }

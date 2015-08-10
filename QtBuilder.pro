@@ -7,13 +7,16 @@ QT      += core gui
 CONFIG	+= 3dnow mmx stl sse sse2 \
 	embed_manifest_exe
 
+QMAKE_LFLAGS_WINDOWS += \
+	/MANIFESTUAC:"level='requireAdministrator'uiAccess='true'"
+
 SOURCES += main.cpp \
 	qtbuilder.cpp \
 	helpers.cpp \
 	guitools.cpp \
 	buildsteps.cpp \
 	processes.cpp \
-    guimain.cpp
+	guimain.cpp
 
 HEADERS += \
 	qtbuilder.h \
@@ -26,9 +29,6 @@ RESOURCES += \
 
 OTHER_FILES += \
 	appinfo.rc
-
-QMAKE_LFLAGS += \
-	/MANIFESTUAC:"level='requireAdministrator'uiAccess='false'"
 
 CONFIG(debug, debug|release):{
 	D		 = d
