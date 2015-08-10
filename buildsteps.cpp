@@ -29,7 +29,7 @@
 #include <QUuid>
 
 const bool qtBuilderUseTargets = false;
-const bool qtBuilderConfigOnly = true;
+const bool qtBuilderConfigOnly = false;
 
 // ~~thread safe (no mutexes) ...
 void QtBuilder::loop()
@@ -347,8 +347,7 @@ bool QtBuilder::configure(int msvc, int type)
 
 	BuildProcess proc(this);
 	proc.setArgs(qtConfig);
-//	proc.start("configure");
-	proc.start("pause");
+	proc.start("configure");
 
 	return proc.result();
 }
