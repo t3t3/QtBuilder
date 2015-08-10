@@ -67,6 +67,8 @@ QtProgress::QtProgress(int color, QWidget *parent) : QProgressBar(parent)
 	setStyle(new QMotifStyle());
 	setFocusPolicy(Qt::NoFocus);
 	setFixedHeight(defGuiHeight);
+	setMinimum(0);
+	setMaximum(0);
 
 	QPalette p(palette());
 	p.setColor(QPalette::Highlight, colors.at(color));
@@ -77,33 +79,38 @@ QtProgress::QtProgress(int color, QWidget *parent) : QProgressBar(parent)
 	f.setPixelSize(12);
 	f.setFamily("Consolas");
 	setFont(f);
-
-	hide();
 }
 
 CopyProgress::CopyProgress(QWidget *parent) : QtProgress(Critical, parent)
 {
+	hide();
+}
+
+void CopyProgress::setMaximum(int maximum)
+{
+	QProgressBar::setMaximum(maximum);
+	QProgressBar::show();
 }
 
 void CopyProgress::progress(int count, const QString &file, qreal mbs)
 {
-	if (count && !isVisible())
-		show();
+	if (!maximum())
+		return;
 
 	QString text = qtBuilderProgressTempl.arg(mbs,6,FMT_F,2,FILLSPC).arg(file);
 
-	setValue(count);
 	setFormat(text);
+	setValue(count);
 }
 
-DiskSpaceBar::DiskSpaceBar(const QString &name, int color, QWidget *parent) : QtProgress(color, parent),
+DiskSpaceBar::DiskSpaceBar(QWidget *parent, int color, const QString &name) : QtProgress(color, parent),
 	m_diskSpace(0), m_name(name)
 {
 }
 
 void DiskSpaceBar::showEvent(QShowEvent *event)
 {
-	QProgressBar::showEvent(event);
+	QtProgress::showEvent(event);
 	refresh();
 }
 

@@ -110,7 +110,7 @@ class DiskSpaceBar : public QtProgress
 	Q_OBJECT
 
 public:
-	DiskSpaceBar(const QString &name, int color, QWidget *parent);
+	DiskSpaceBar(QWidget *parent, int color, const QString &name);
 	inline int maxUsed() const	{ return m_diskSpace; }
 
 public slots:
@@ -135,6 +135,7 @@ public:
 	CopyProgress(QWidget *parent);
 
 public slots:
+	void setMaximum(int maximum);
 	void progress(int count, const QString &file, qreal mbs);
 };
 

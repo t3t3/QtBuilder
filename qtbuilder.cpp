@@ -403,13 +403,14 @@ bool QtBuilder::checkDir(int which, QString &path, int &count, bool skipRootFile
 // ~~thread safe (no mutexes) ...
 int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 {
-	int count = 0;
+	int count;
 	QString source, target;
 	if (!checkDir(to, target) ||
 		!checkDir(fr, source, count, skipRootFiles))
 		return 0;
 
 	diskOp(to, true, count);
+	count = 0;
 
 	QQueue<QPair<QDir, QDir> > queue;
 	queue.enqueue(qMakePair(QDir(source), QDir(target)));

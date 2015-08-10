@@ -93,18 +93,18 @@ void QtBuilder::createUi()
 	vlt->setContentsMargins(0, 0, 0, 0);
 	vlt->setSpacing(0);
 
-	QBoxLayout *lyt = vlt;
+	QBoxLayout * lyt = vlt;
 	createAddons(lyt);
 
 	m_log = new QtAppLog(wgt);
 	m_bld = new BuildLog(wgt);
 	m_cpy = new CopyProgress(wgt);
-	m_tmp = new DiskSpaceBar("Build ", Process, wgt);
-	m_tgt = new DiskSpaceBar("Target", Elevated, wgt);
+	m_tmp = new DiskSpaceBar(wgt, Process,  "Build ");
+	m_tgt = new DiskSpaceBar(wgt, Elevated, "Target");
 
 	connect(this, SIGNAL(log(const QString &, const QString&,int)),	m_log, SLOT(add(const QString &, const QString&,int)),	Qt::BlockingQueuedConnection);
 	connect(this, SIGNAL(log(const QString &, int)),				m_log, SLOT(add(const QString &, int)),					Qt::BlockingQueuedConnection);
-	connect(this, SIGNAL(progress(int, const QString &, qreal)),	m_cpy, SLOT(progress(int, const QString &, qreal)),		Qt::BlockingQueuedConnection);
+	connect(this, SIGNAL(progress(int, const QString &, qreal)),	m_cpy, SLOT(progress(int, const QString &, qreal)),		Qt::QueuedConnection);
 	connect(this, SIGNAL(progress(int, const QString &, qreal)),	m_tmp, SLOT(refresh()),									Qt::QueuedConnection);
 	connect(this, SIGNAL(progress(int, const QString &, qreal)),	m_tgt, SLOT(refresh()),									Qt::QueuedConnection);
 

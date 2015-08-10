@@ -27,6 +27,8 @@
 #include <QApplication>
 #include <QUuid>
 
+const bool qtBuilderUseTargets = false;
+
 // ~~thread safe (no mutexes) ...
 void QtBuilder::loop()
 {
@@ -343,6 +345,13 @@ bool QtBuilder::configure(int msvc, int type)
 bool QtBuilder::jomBuild()
 {
 	log("Build step", "Running jom make ...", AppInfo);
+
+	if (!qtBuilderUseTargets)
+	{
+		BuildProcess proc(this, true);
+		proc.start("jom.exe");
+		return proc.result();
+	}
 	//
 	// TODO: this needs to go into the config sections, as it is of course connected
 	// with the pre-defined configure options (whatever they are good for anyway)!!!
