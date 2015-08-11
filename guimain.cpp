@@ -24,6 +24,7 @@
 #include "qtbuilder.h"
 #include "helpers.h"
 
+#include <QApplication>
 #include <QCheckBox>
 //
 // note: most of the checkbox stuff can be considered display dummies;
@@ -33,8 +34,8 @@
 // 2. use a configuration object class which encapsulates all selections
 // (the current string lists are made for easy joining to cmd line args)
 //
-const QString qtBuilderHeaderStyle("%1 { background: %2; color: white;} %1:disabled { background: #363636; color: #969696; border-right: 1px solid #565656; }");
 const QString qtBuilderDefault("!");
+const QString qtBuilderToolTip("QToolTip { font-size: 10pt; color: black; background: white; border: none; margin: 3px 0px 0px 3px; }");
 
 QStringList qtBuilderMatchLists(const QStringList &full, const QStringList &partial, bool forceOff = false)
 {
@@ -62,6 +63,8 @@ QStringList qtBuilderMatchLists(const QStringList &full, const QStringList &part
 
 void QtBuilder::createUi()
 {
+	qApp->setStyleSheet(qtBuilderToolTip);
+
 	QWidget *wgt = new QWidget(this);
 	setCentralWidget(wgt);
 
@@ -111,17 +114,9 @@ void QtBuilder::createConfig(QBoxLayout *&lyt)
 	lyt = new QVBoxLayout();
 	lyt->setContentsMargins(0, 0, 0, 0);
 	lyt->setSpacing(0);
+	lyt->addWidget(new QtHeader("BUILD PROGRESS LOG", (AppInfo), lyt->parentWidget()));
+
 	hlt->addLayout(lyt);
-
-	QFont f(font());
-	f.setPointSize(11);
-
-	QLabel *lbl = new QLabel("BUILD PROGRESS LOG", lyt->parentWidget());
-	lbl->setStyleSheet(qtBuilderHeaderStyle.arg(CLASS_NAME(QLabel), colors.at(AppInfo)));
-	lbl->setAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
-	lbl->setFixedHeight(defGuiHeight);
-	lbl->setFont(f);
-	lyt->addWidget(lbl);
 }
 
 void QtBuilder::createCfgOpt(QBoxLayout *lyt)
@@ -152,74 +147,60 @@ void QtBuilder::createBldOpt(QBoxLayout *lyt)
 
 void QtBuilder::createAppOpt(QBoxLayout *lyt)
 {
-	m_sel = new Selections("BUILDS", Warning, centralWidget());
-	m_sel->setAutoSplit(true);
-	m_sel->setTriState(false);
+	{	m_sel = new Selections("BUILDS", Warning, centralWidget());
+		m_sel->setAutoSplit(true);
+		m_sel->setTriState(false);
 
-	m_sel->addModes(m_confs);
-	m_sel->addModes(m_types);
-	m_sel->addModes(m_archs);
-	m_sel->addModes(m_msvcs);
+		m_sel->addModes(m_confs);
+		m_sel->addModes(m_types);
+		m_sel->addModes(m_archs);
+		m_sel->addModes(m_msvcs);
 
-	m_sel->create();
-	lyt->addWidget(m_sel);
+		m_sel->create();
+		lyt->addWidget(m_sel);
 
-	connect(m_sel,	SIGNAL(selected(int)),			 this, SLOT(setup(int)));
-	connect(this,	SIGNAL(current(const Modes &)), m_sel, SLOT(activate(const Modes &)), Qt::QueuedConnection);
+		connect(m_sel,	SIGNAL(selected(int)),			 this, SLOT(setup(int)));
+		connect(this,	SIGNAL(current(const Modes &)), m_sel, SLOT(activate(const Modes &)), Qt::QueuedConnection);
+	}
+	QVBoxLayout *vlt;
+	{
+		m_opt = new QWidget(this);
+		m_sel->layout()->addWidget(m_opt);
 
-	m_cct = new QtSlider(Warning, Critical, m_sel);
-	m_cct->setRange(1,m_coreCount);
-	m_cct->setValue(  m_coreCount);
-	m_cct->setAccessibleName("CORES");
-	m_sel->layout()->addWidget(m_cct);
+		vlt = new QVBoxLayout(m_opt);
+		vlt->setContentsMargins(0, 0, 0, 2);
+		vlt->setSpacing(2);
+	}
+	DirSelect *sel;
+	{	sel = new DirSelect(m_source, Source, Warning, m_opt);
+		vlt->addWidget(sel);
 
-	connect(m_cct, SIGNAL(valueChanged(int)), this, SLOT(cores(int)));
+		connect(sel, SIGNAL(dirSelected(const QString &, const QString &)), this, SLOT(sourceDir(const QString &, const QString &)));
 
-	m_go = new QtButton("GO", "STOP", m_sel, true);
-	m_sel->layout()->addWidget(m_go);
+		sel = new DirSelect(m_libPath, Target, Warning, m_opt);
+		vlt->addWidget(sel);
 
-	connect(m_go, SIGNAL(isOn(bool)), this, SLOT(process(bool)), Qt::QueuedConnection);
-}
+		connect(sel, SIGNAL(dirSelected(const QString &, const QString &)), this, SLOT(tgtLibDir(const QString &, const QString &)));
+	}
+	FOR_CONST_IT(m_bopts)
+	{
+		int  enumId = IT.key();
+		QPair<int, int> range = m_range.value(enumId);
 
+		QtSlider *qsl = new QtSlider(IT.key(), Warning, Critical, m_opt);
+		qsl->setAccessibleName(enumName(enumId).toUpper());
+		qsl->setRange(range.first, range.second);
+		qsl->setValue(IT.value());
+		vlt->addWidget(qsl);
 
+		connect(qsl, SIGNAL(optionChanged(int, int)), this, SLOT(option(int, int)));
+	}
+	{	m_go = new QtButton("GO", "STOP", m_sel, true);
+		m_go->setFixedHeight(defGuiHeight);
+		m_sel->layout()->addWidget(m_go);
 
-QtHeader::QtHeader(const QString &text, int color, QWidget *parent) : QLabel(text, parent)
-{
-	setStyleSheet(qtBuilderHeaderStyle.arg(CLASS_NAME(QLabel), colors.at(color)));
-	setAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
-	setFixedHeight(defGuiHeight);
-	setFont(parent->font());
-}
-
-QtButton::QtButton(const QString &off, const QString &on, QWidget *parent, bool resetExternal) : QtHeader(off, Critical, parent),
-	m_isOn(false), m_resetExtern(resetExternal)
-{
-	m_text.append(off);
-	m_text.append(on);
-
-	setCursor(Qt::PointingHandCursor);
-	setFocusPolicy(Qt::NoFocus);
-
-	QFont f(font());
-	f.setPointSize(12);
-	f.setBold(true);
-	setFont(f);
-}
-
-void QtButton::mouseReleaseEvent(QMouseEvent *event)
-{
-	Q_UNUSED(event);
-	if (!m_isOn || !m_resetExtern) setOff(m_isOn);
-	isOn(m_isOn);
-}
-
-void QtButton::setOff(bool off)
-{
-	m_isOn = !off;
-	setText(m_text.at(m_isOn));
-
-	QString c = colors.at(m_isOn ? AppInfo : Critical);
-	setStyleSheet(qtBuilderHeaderStyle.arg(CLASS_NAME(QLabel), c));
+		connect(m_go, SIGNAL(isOn(bool)), this, SLOT(process(bool)), Qt::QueuedConnection);
+	}
 }
 
 

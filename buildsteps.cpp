@@ -28,10 +28,10 @@
 #include <QApplication>
 #include <QUuid>
 
-const bool qtBuilderConfigOnly = false;
+const bool qtBuilderConfigOnly = true;
 const bool qtBuilderUseTargets = false;
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 void QtBuilder::loop()
 {
 	if (!createTemp())
@@ -96,7 +96,7 @@ void QtBuilder::loop()
 	QMutexLocker locker(&m_mutex); // ... avoid watcher "finished" during close event signal reconnection!
 }
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 bool QtBuilder::createTemp()
 {
 	log("Build step", "Creating temp infrastructure ...", AppInfo);
@@ -138,7 +138,7 @@ bool QtBuilder::createTemp()
 	return true;
 }
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 bool QtBuilder::removeTemp()
 {
 	if (m_keepDisk)
@@ -148,7 +148,7 @@ bool QtBuilder::removeTemp()
 	return removeImdisk(false, false);
 }
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 bool QtBuilder::createTarget(int msvc, int type, int arch)
 {
 	QStringList tp;
@@ -202,7 +202,7 @@ bool QtBuilder::createTarget(int msvc, int type, int arch)
 	return true;
 }
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 bool QtBuilder::copySource()
 {
 	log("Build step", "Copying source files ...", AppInfo);
@@ -221,7 +221,7 @@ bool QtBuilder::copySource()
 	return count;
 }
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 bool QtBuilder::copyTarget()
 {
 	log("Build step", "Copying target files ...", AppInfo);
@@ -261,7 +261,7 @@ bool QtBuilder::copyTarget()
 	return count;
 }
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 bool QtBuilder::prepare(int msvc, int type, int arch)
 {
 	if (!checkDir(Source))
@@ -320,7 +320,7 @@ bool QtBuilder::prepare(int msvc, int type, int arch)
 	return true;
 }
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 bool QtBuilder::confClean()
 {
 	if (!QFileInfo(m_build+"/Makefile").exists())
@@ -337,10 +337,10 @@ bool QtBuilder::confClean()
 	// ... seems to be better to not use confclean results, i.e. if the prev. build was messed up.
 }
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 bool QtBuilder::configure(int msvc, int type)
 {
-	log("Build step", "Running configure.exe ...", AppInfo);
+	log("Build step", QString("Running %1 ...").arg(qtConfigure), AppInfo);
 
 	QStringList c;
 	FOR_CONST_IT(m_confs)
@@ -353,18 +353,18 @@ bool QtBuilder::configure(int msvc, int type)
 
 	if (false)
 	{	BuildProcess proc(this);
-		proc.setArgs(QString("127.0.0.1 -n %1").arg(m_coreCount));
+		proc.setArgs(QString("127.0.0.1 -n %1").arg(m_bopts.value(RamDisk)));
 		proc.start("ping.exe");
 		return proc.result();
 	}
 
 	BuildProcess proc(this);
 	proc.setArgs(qtConfig);
-	proc.start("configure.exe");
+	proc.start(qtConfigure);
 	return proc.result();
 }
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 bool QtBuilder::compiling()
 {
 	log("Build step", QString("Running %1 ...").arg(msBuildTool), AppInfo);
@@ -374,7 +374,7 @@ bool QtBuilder::compiling()
 
 	QString args;
 	if (msBuildTool.contains("jom", Qt::CaseInsensitive))
-		args = QString("/J %1 ").arg(m_coreCount);
+		args = QString("/J %1 ").arg(m_bopts.value(Cores));
 
 	if(!qtBuilderUseTargets)
 	{
@@ -400,7 +400,7 @@ bool QtBuilder::compiling()
 	return true;
 }
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 bool QtBuilder::cleaning()
 {
 return true;
@@ -419,7 +419,7 @@ return true;
 	}	return true;
 }
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 bool QtBuilder::finalize()
 {
 	QLocale l(QLocale::English);
@@ -435,7 +435,7 @@ bool QtBuilder::finalize()
 	return true;
 }
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 bool QtBuilder::setEnvironment(const QString &vcVars, const QString &mkSpec)
 {
 	m_env.clear();
@@ -566,7 +566,7 @@ bool QtBuilder::setEnvironment(const QString &vcVars, const QString &mkSpec)
 	return true;
 }
 
-// ~~thread safe (no mutexes) ...
+// needs to be called from thread (no mutexes!)...
 void QtBuilder::writeQtVars(const QString &path, const QString &vcVars, int msvc)
 {
 	QString nat = QDir::toNativeSeparators(path);

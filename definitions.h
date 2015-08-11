@@ -5,6 +5,7 @@
 // user config section...
 //
 const QString msBuildTool("jom.exe"); // ... or "nmake.exe"
+const QString qtConfigure("configure.exe");
 const QString vcInst("D:/BIZ/MICROSOFT/" ); // TODO: replace by querying the registry!
 
 const QString vc2010("Visual Studio 2010");

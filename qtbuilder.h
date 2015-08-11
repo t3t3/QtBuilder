@@ -33,12 +33,15 @@
 #include <QTextEdit>
 #include <QSlider>
 #include <QLabel>
+#include <QMenu>
 #include <QBoxLayout>
+#include <QPushButton>
 #include <QProxyStyle>
 #include <QSignalMapper>
 #include <QFutureWatcher>
 #include <QSettings>
 #include <QProcess>
+#include <QPaintEvent>
 #include <QFileInfo>
 #include <QDir>
 
@@ -214,8 +217,11 @@ class QtSlider : public QSlider
 {
 	Q_OBJECT
 
+signals:
+	void optionChanged(int option, int value);
+
 public:
-	explicit QtSlider(int bgnd, int color, QWidget *parent);
+	explicit QtSlider(int option, int bgnd, int color, QWidget *parent);
 
 	void setOrientation(Qt::Orientation o);
 	QSize minimumSizehint() const;
@@ -232,6 +238,7 @@ protected:
 	void keyReleaseEvent(QKeyEvent *event);
 
 private:
+	int  m_option;
 	bool m_clickSet;
 	bool m_sliding;
 };
@@ -244,6 +251,52 @@ public:
 	void drawComplexControl(ComplexControl ctrl, const QStyleOptionComplex *opt, QPainter *p, const QWidget *wgt = 0) const;
 	QRect subControlRect(ComplexControl ctrl, const QStyleOptionComplex *opt, SubControl sub, const QWidget *wgt = 0) const;
 	int pixelMetric(PixelMetric pMetric, const QStyleOption *opt = 0, const QWidget *wgt = 0) const;
+};
+
+class DirMenu : public QMenu
+{
+	Q_OBJECT
+
+signals:
+	void dirSelected(const QString &path, const QString &ver);
+
+public:
+	explicit DirMenu(int dir, int color, QWidget *parent);
+
+public slots:
+	void browseDisk();
+
+protected slots:
+	void action(QAction *act);
+
+protected:
+	bool predefined();
+
+private:
+	const int m_dir;
+};
+
+class DirSelect : public QPushButton
+{
+	Q_OBJECT
+
+signals:
+	void dirSelected(const QString &path, const QString &ver);
+
+public:
+	explicit DirSelect(const QString &path, int dir, int color, QWidget *parent);
+
+protected slots:
+	void updateDir(const QString &path, const QString &ver = QString());
+
+protected:
+	void resizeEvent(QResizeEvent *event);
+	void paintEvent(QPaintEvent *event);
+	bool eventFilter(QObject *object, QEvent *event);
+
+private:
+	const int  m_dir;
+	bool  m_isElided;
 };
 
 class QtAtomicInt : public QAtomicInt
@@ -264,6 +317,7 @@ class QtBuilder : public QMainWindow, private QElapsedTimer
 {
 	Q_OBJECT
 	Q_ENUMS(States)
+	Q_ENUMS(Options)
 
 signals:
 	void log(const QString &msg, const QString &text = QString(), int type = Informal);
@@ -291,6 +345,7 @@ public:
 	inline int	lastStateId() const { return m_state; }
 	const QString lastState() const;
 
+	enum Options { Cores, RamDisk, };
 	enum States
 	{//	Processing...
 		NotStarted		= -1,
@@ -323,6 +378,7 @@ public:
 		ErrFinalize		= 88,
 		ErrCopyTarget	= 89,
 	};
+	enum Dirs { Source = 0x1001, Target, Build, Temp };
 
 public slots:
 	void procOutput();
@@ -336,9 +392,12 @@ protected slots:
 	void end();
 	void message();
 
-	void cores(int value);
 	void setup(int option);
+	void option(int opt, int value);
 	void disable(bool disable = true);
+
+	void sourceDir(const QString &path, const QString &ver);
+	void tgtLibDir(const QString &path, const QString &ver);
 
 protected:
 	void createUi();
@@ -352,7 +411,6 @@ protected:
 	bool createTarget(int msvc, int type, int arch);
 	bool copyTarget	 ();
 	bool copySource	 ();
-	bool checkSource ();
 
 	bool prepare	 (int msvc, int type, int arch);
 	bool confClean	 ();
@@ -370,6 +428,8 @@ protected:
 	bool checkDir(int which, QString &path);
 	bool checkDir(int which, QString &path, int &count, bool skipRootFiles = false);
 
+	void doLog(const QString &msg, const QString &text = QString(), int type = Informal);
+	void doLog(const QString &msg, int type);
 	void diskOp(int to = -1, bool start = false, int count = 0);
 
 	bool attachImdisk(QString &letter);
@@ -387,18 +447,17 @@ protected:
 
 	const QString driveLetter();
 	const QString targetDir(int msvc, int arch, int type, QString &native, QStringList &t = QStringList());
-	bool qtSettings(QStringList &versions, QString &instDir);
+	bool  qtSettings(QStringList &versions, QString &instDir);
+	const QString enumName(int enumId) const;
 
 private:
-	enum Dirs { Source, Target, Build, Temp };
-
 	QFutureWatcher<void> m_loop;
 	QProcessEnvironment	 m_env;
 	CopyProgress *m_cpy;
 	DiskSpaceBar *m_tgt;
 	DiskSpaceBar *m_tmp;
 	Selections *m_sel;
-	QtSlider *m_cct;
+	QWidget	 *m_opt;
 	QtAppLog *m_log;
 	BuildLog *m_bld;
 	QtButton *m_go;
@@ -415,12 +474,13 @@ private:
 	QStringList m_dirFilter;
 	QStringList m_extFilter;
 
+	QMap<int, QPair<int, int> > m_range;
+	QMap<int, int> m_bopts;
 	Modes m_confs;
 	Modes m_msvcs;
 	Modes m_archs;
 	Modes m_types;
 
-	uint m_coreCount;
 	uint m_imdiskUnit;
 	bool m_keepDisk;
 

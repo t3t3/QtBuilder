@@ -16,7 +16,11 @@ SOURCES += main.cpp \
 	guitools.cpp \
 	buildsteps.cpp \
 	processes.cpp \
-	guimain.cpp
+	guimain.cpp \
+    methods.cpp \
+    guiprogress.cpp \
+    guislider.cpp \
+    guilogs.cpp
 
 HEADERS += \
 	qtbuilder.h \
