@@ -28,10 +28,6 @@
 #include <QFileDialog>
 #include <QPainter>
 
-const QString qtBuilderRegistryIns("InstallDir");
-const QString qtBuilderRegistryDig("HKEY_CURRENT_USER\\Software\\Digia\\Versions");
-const QString qtBuilderRegistryTrl("HKEY_CURRENT_USER\\Software\\Trolltech\\Versions");
-
 const QString qtBuilderHeaderStyle("%1 { background: %2; color: white; } %1:disabled { background: #969696; color: #EFEFEF; border-right: 1px solid #B2B2B2; }");
 const QString qtBuilderQtMenuStyle("QMenu { color: black; background: white; border: none; } QMenu::item:selected { color: white; background: %1; }");
 const QString qtBuilderButtonStyle("QPushButton { background: %1; color: black; border: none; text-align: left; padding: 0px 9px; }"
@@ -100,7 +96,7 @@ DirSelect::DirSelect(const QString &path, int dir, int color, QWidget *parent) :
 	setFont(f);
 
 
-	DirMenu *m = new DirMenu(dir, Critical, this);
+	DirMenu *m = new DirMenu(path, dir, Critical, this);
 	if (dir != QtBuilder::Source || m->isEmpty())
 		connect(this, SIGNAL(released()), m, SLOT(browseDisk()));
 	else
@@ -127,7 +123,7 @@ void DirSelect::updateDir(const QString &path, const QString &ver)
 
 	setFont(f);
 	setText(t);
-	m_isElided = t != toolTip();
+	m_isElided = toolTip().compare(QDir::toNativeSeparators(t), Qt::CaseInsensitive);
 }
 
 bool DirSelect::eventFilter(QObject *object, QEvent *event)
@@ -180,8 +176,8 @@ void DirSelect::paintEvent(QPaintEvent *event)
 
 
 
-DirMenu::DirMenu(int dir, int color, QWidget *parent) : QMenu(parent),
-	m_dir(dir)
+DirMenu::DirMenu(const QString &path, int dir, int color, QWidget *parent) : QMenu(parent),
+	m_last(path), m_dir(dir)
 {
 	setStyleSheet(qtBuilderQtMenuStyle.arg(colors.at(color)));
 
@@ -212,8 +208,7 @@ void DirMenu::action(QAction *act)
 	else
 	{
 		QString key = act->data().toString();
-		QSettings s	( key, QSettings::NativeFormat );
-		path = QDir(s.value(qtBuilderRegistryIns).toString()).absolutePath();
+		path = QDir(Q_REGISTRY(key).value(registryIns).toString()).absolutePath();
 		emit dirSelected(path, QDir(key).dirName());
 	}
 }
@@ -224,12 +219,13 @@ void DirMenu::browseDisk()
 	switch(m_dir)
 	{
 	case QtBuilder::Source:
-		dir = QFileDialog::getOpenFileName(0,"Select Qt sources path","C:/Qt",qtConfigure);
+		dir = QFileDialog::getOpenFileName(0,"Select Qt sources path",m_last,qtConfigure);
 		dir = QFileInfo(dir).absolutePath();
 		break;
 
 	case QtBuilder::Target:
-		dir = QFileDialog::getExistingDirectory(0,"Select build target path","C:/Qt");
+		dir = QFileDialog::getExistingDirectory(0,"Select build target path",m_last);
+		dir = QDir::cleanPath(dir); // ... apparently the file dialog returns a _native_ path string - what is a bit awkward imo.
 		break;
 
 	default:
@@ -245,20 +241,20 @@ void DirMenu::browseDisk()
 		if (c.isDigit()&&(ok||(ok=(v=c.digitValue())>3||v<6)))
 			n.append(c);
 
+	m_last = dir;
 	emit dirSelected(dir, n.join("."));
 }
 
 bool DirMenu::predefined()
 {
 	QStringList reg;
-	reg += qtBuilderRegistryDig;
-	reg += qtBuilderRegistryTrl;
+	reg += registryDig;
+	reg += registryTrl;
 	QMap<QString, QString> map, ver;
 
 	FOR_CONST_IT(reg)
 	{
-		QSettings s(*IT, QSettings::NativeFormat);
-		QStringList  keys = s.childGroups();
+		QStringList  keys = Q_REGISTRY(*IT).childGroups();
 		FOR_CONST_JT(keys)
 		{
 			QString key = (*IT)+"\\"+*JT;
@@ -268,10 +264,9 @@ bool DirMenu::predefined()
 	FOR_CONST_IT(map)
 	{
 		QString key = IT.value();
-		QSettings s(key, QSettings::NativeFormat);
-		QString dir = s.value(qtBuilderRegistryIns).toString().trimmed();
+		QString dir = Q_REGISTRY(key).value(registryIns).toString().trimmed();
 
-		if (!s.contains(qtBuilderRegistryIns) && !dir.isEmpty())
+		if (dir.isEmpty())
 			continue;
 
 		QDir  d = QDir(dir);

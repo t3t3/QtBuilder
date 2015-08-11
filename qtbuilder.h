@@ -45,7 +45,39 @@
 #include <QFileInfo>
 #include <QDir>
 
-typedef QMap<int, bool> Modes;
+struct Range
+{
+	Range()
+	{
+		minimum = 0;
+		maximum = 0;
+	}
+	Range(int min, int max)
+	{
+		minimum = min;
+		maximum = max;
+	}
+	Range(const Range &other)
+	{
+		minimum = other.minimum;
+		maximum = other.maximum;
+	}
+	Range operator=(const Range &other)
+	{
+		minimum = other.minimum;
+		maximum = other.maximum;
+		return *this;
+	}
+	bool operator==(const Range &other)
+	{
+		return	minimum == other.minimum &&
+				maximum == other.maximum;
+	}
+	int minimum;
+	int maximum;
+};
+typedef QMap<int, Range> Ranges;
+typedef QMap<int, bool>  Modes;
 Q_DECLARE_METATYPE(Modes)
 
 class QtAppLog : public QTextBrowser
@@ -62,6 +94,9 @@ public:
 public slots:
 	void add(const QString &msg, const QString &text, int type = Informal);
 	void add(const QString &msg, int type = Informal);
+
+protected:
+	void paintEvent(QPaintEvent *event);
 
 private:
 	QMap<int, QString> m_info;
@@ -261,7 +296,7 @@ signals:
 	void dirSelected(const QString &path, const QString &ver);
 
 public:
-	explicit DirMenu(int dir, int color, QWidget *parent);
+	explicit DirMenu(const QString &path, int dir, int color, QWidget *parent);
 
 public slots:
 	void browseDisk();
@@ -273,6 +308,7 @@ protected:
 	bool predefined();
 
 private:
+	QString  m_last;
 	const int m_dir;
 };
 
@@ -295,8 +331,8 @@ protected:
 	bool eventFilter(QObject *object, QEvent *event);
 
 private:
-	const int  m_dir;
-	bool  m_isElided;
+	const int m_dir;
+	bool m_isElided;
 };
 
 class QtAtomicInt : public QAtomicInt
@@ -332,7 +368,7 @@ public:
 	virtual ~QtBuilder();
 
 	void show();
-	void setup();
+	void setupDefaults();
 	void cancel();
 
 	inline const QProcessEnvironment &environment() const { return m_env; }
@@ -447,7 +483,6 @@ protected:
 
 	const QString driveLetter();
 	const QString targetDir(int msvc, int arch, int type, QString &native, QStringList &t = QStringList());
-	bool  qtSettings(QStringList &versions, QString &instDir);
 	const QString enumName(int enumId) const;
 
 private:
@@ -474,12 +509,13 @@ private:
 	QStringList m_dirFilter;
 	QStringList m_extFilter;
 
-	QMap<int, QPair<int, int> > m_range;
 	QMap<int, int> m_bopts;
-	Modes m_confs;
-	Modes m_msvcs;
-	Modes m_archs;
-	Modes m_types;
+	QList<Modes *> m_opts;
+	Ranges	m_range;
+	Modes	m_confs;
+	Modes	m_msvcs;
+	Modes	m_archs;
+	Modes	m_types;
 
 	uint m_imdiskUnit;
 	bool m_keepDisk;

@@ -31,32 +31,55 @@
 #include <QMessageBox>
 #include <QtConcurrentRun>
 
-const QStringList  qtBuilderQtDirs = QStringList() << "";	// ... override detection from registry!
+Q_REGISTER_METATYPE(Modes)
 
-void QtBuilder::setup() /// defaults & some still hard-coded setup...
+class QtBuildSettings
 {
-	QMutexLocker locker(&m_mutex);
+public:
+	QtBuildSettings()
+	{
+		settings = Q_SET_GET(SETTINGS_BUILDOPT).toStringList();
+	}
+	void set(Modes &modes, int opt, bool def)
+	{
+		modes.insert(opt, settings.contains(QString::number(opt)) || def);
+	}
+private:
+	QStringList settings;
+};
 
-	m_msvcs.insert(MSVC2010, false);	// ... default build requests...
-	m_msvcs.insert(MSVC2012, false);
-	m_msvcs.insert(MSVC2013, true );
-	m_msvcs.insert(MSVC2015, false);
+void QtBuilder::setupDefaults()
+{
+	int cores = QThread::idealThreadCount();
+	QtBuildSettings b;
 
-	m_types.insert(Shared,	 true );
-	m_types.insert(Static,	 true );
+	b.set(m_msvcs, MSVC2010, false);
+	b.set(m_msvcs, MSVC2012, false);
+	b.set(m_msvcs, MSVC2013, true );
+	b.set(m_msvcs, MSVC2015, false);
 
-	m_archs.insert(X86,		 true );
-	m_archs.insert(X64,		 true );
+	b.set(m_types, Shared,	 true );
+	b.set(m_types, Static,	 true );
 
-	m_confs.insert(Debug,	 true );
-	m_confs.insert(Release,	 true );
+	b.set(m_archs, X86,		 true );
+	b.set(m_archs, X64,		 true );
+
+	b.set(m_confs, Debug,	 true );
+	b.set(m_confs, Release,	 true );
 
 	m_bopts.insert(RamDisk,	 4);
-	m_bopts.insert(Cores,	 qMax(QThread::idealThreadCount()-1, 1));
+	m_bopts.insert(Cores,	 qMax(cores-1, 1));
 
-	m_version = "4.8.7";
-	m_source  = "C:/Qt/4.8.7";
-	m_libPath = "C:/Qt/4.8.7/builds";
+	m_range.insert(RamDisk,	 Range(3, 10));
+	m_range.insert(Cores,	 Range(1, cores));
+
+	QSettings	s;
+	m_version = s.value(SETTINGS_LVERSION, "4.8.7"				).toString();
+	m_source  = s.value(SETTINGS_L_SOURCE, "C:\Qt\4.8.7"		).toString();
+	m_libPath = s.value(SETTINGS_L_TARGET, "C:\Qt\4.8.7\builds"	).toString();
+
+	m_source  = QDir::cleanPath(m_source);
+	m_libPath = QDir::cleanPath(m_libPath);
 }
 
 
@@ -65,13 +88,16 @@ QtBuilder::QtBuilder(QWidget *parent) : QMainWindow(parent),
 	m_log(NULL), m_cpy(NULL), m_tgt(NULL), m_tmp(NULL), m_keepDisk(false), m_imdiskUnit(imdiskUnit)
 {
 	m_state = NotStarted;
-	m_range.insert(Cores,	qMakePair(1, QThread::idealThreadCount()));
-	m_range.insert(RamDisk, qMakePair(3, 10));
+
+	m_opts.append(&m_confs);
+	m_opts.append(&m_archs);
+	m_opts.append(&m_types);
+	m_opts.append(&m_msvcs);
 
 	setWindowIcon(QIcon(":/graphics/icon.png"));
 	setWindowTitle(qApp->applicationName());
 
-	setup();
+	setupDefaults();
 	createUi();
 
 	connect(&m_loop, SIGNAL(finished()), this, SLOT(processed()));
@@ -100,7 +126,7 @@ void QtBuilder::closeEvent(QCloseEvent *event)
 
 void QtBuilder::end()
 {
-	QSettings().setValue(Q_SETTINGS_GEOMETRY, saveGeometry());
+	QSettings().setValue(SETTINGS_GEOMETRY, saveGeometry());
 	qApp->setProperty("result", (int)m_state);
 
 	hide();
@@ -110,7 +136,7 @@ void QtBuilder::end()
 void QtBuilder::show()
 {
 	QSettings  s;
-	QByteArray g = s.value(Q_SETTINGS_GEOMETRY).toByteArray();
+	QByteArray g = s.value(SETTINGS_GEOMETRY).toByteArray();
 	if (!g.isEmpty())
 		 restoreGeometry(g);
 	else setGeometry(centerRect(25));
@@ -120,10 +146,9 @@ void QtBuilder::show()
 	m_log->addSeparator();
 	m_log->add("QtBuilder started", AppInfo);
 
-	QString tdrive = m_libPath.left(3);
-	if(QDir(tdrive).exists())
-		 m_tgt->setDrive(tdrive);
-	else m_log->add("Target drive doesn't exist:", QDir::toNativeSeparators(tdrive), Critical);
+	if(QDir(m_libPath).exists())
+		 m_tgt->setDrive(m_libPath);
+	else m_log->add("Target path missing:", QDir::toNativeSeparators(m_libPath), Critical);
 }
 
 void QtBuilder::option(int opt, int value)
@@ -133,30 +158,19 @@ void QtBuilder::option(int opt, int value)
 
 void QtBuilder::setup(int option)
 {
-	switch(option)
+	QMutexLocker locker(&m_mutex);
+
+	QStringList opts;
+	FOR_IT(m_opts)
 	{
-	case Debug:
-	case Release:
-		m_confs[option] = !m_confs[option];
-		break;
-
-	case Shared:
-	case Static:
-		m_types[option] = !m_types[option];
-		break;
-
-	case X86:
-	case X64:
-		m_archs[option] = !m_archs[option];
-		break;
-
-	case MSVC2010:
-	case MSVC2012:
-	case MSVC2013:
-	case MSVC2015:
-		m_msvcs[option] = !m_msvcs[option];
-		break;
+		for(auto JT=(*IT)->begin();JT!=(*IT)->end();++JT)
+		{	if ( JT.key() == option)
+				*JT = option;
+			if ( JT.value())
+				opts.append(QString::number(JT.key()));
+		}
 	}
+	Q_SET_SET(SETTINGS_BUILDOPT, opts);
 }
 
 void QtBuilder::disable(bool disable)
@@ -281,23 +295,31 @@ void QtBuilder::sourceDir(const QString &path, const QString &ver)
 {	//
 	// note: these should be - and usually are - verified!
 	//
+	qDebug()<<path;
+
+	QString native = QDir::toNativeSeparators(path);
 	m_source = path;
 	m_version = ver;
-	m_log->add("Source path selected:", QDir::toNativeSeparators(m_source), Elevated);
+	m_log->add("Source path selected:", native, Elevated);
+
+	QSettings().setValue(SETTINGS_L_SOURCE, native);
+	QSettings().setValue(SETTINGS_LVERSION, m_version);
 }
 
 void QtBuilder::tgtLibDir(const QString &path, const QString &ver)
 {	//
 	// note: this should be - and usually is - verified!
 	//
-	m_libPath = path;
-	m_tgt->setDrive(path.left(3));
-	m_log->add("Target path selected:", QDir::toNativeSeparators(m_libPath), Elevated);
+	qDebug()<<path;
 
+	QString native = QDir::toNativeSeparators(path);
+	m_libPath = path;
+	m_tgt->setDrive(m_libPath);
+	m_log->add("Target path selected:", native, Elevated);
+
+	QSettings().setValue(SETTINGS_L_TARGET, native);
 	Q_UNUSED(ver);
 }
-
-#define META_ENUM(ID) (metaObject()->enumerator(metaObject()->indexOfEnumerator(#ID)))
 
 const QString QtBuilder::enumName(int enumId) const
 {
@@ -308,5 +330,3 @@ const QString QtBuilder::lastState() const
 {
 	return META_ENUM(States).key(m_state);
 }
-
-Q_REGISTER_METATYPE(Modes)

@@ -25,6 +25,7 @@
 #include "helpers.h"
 
 #include <QApplication>
+#include <QPainter>
 #include <QDateTime>
 #include <QTimer>
 
@@ -135,6 +136,26 @@ void QtAppLog::add(const QString &msg, const QString &text, int type)
 			QString(text).replace(___LF, qtBuilderBuildLogTabs)).toUtf8().constData());
 }
 
+void QtAppLog::paintEvent(QPaintEvent *event)
+{
+	QPainter painter(viewport());
+	QPixmap p(":/graphics/icon.png");
+	p = p.scaledToWidth(p.width()/2);
+
+	painter.save();
+	painter.setOpacity(0.25);
+
+	QRect r = event->rect();
+	r.setLeft(qAbs(p.width()-r.width()));
+	r.setTop(qAbs(p.height()-r.height()));
+	r.moveTo(r.topLeft()-QPoint(0,r.height()/8));
+
+	painter.setBrushOrigin(r.topLeft());
+	painter.fillRect(r, p);
+	painter.restore();
+
+	QTextBrowser::paintEvent(event);
+}
 
 
 const bool	  qtBuilderWriteBldLog = true;	// creates a build.log with all the stdout from configure/jom; is copied to the target folder.

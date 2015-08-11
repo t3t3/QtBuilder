@@ -25,6 +25,8 @@
 #define HELPERS_H
 
 #include <QStringList>
+#include <QSettings>
+#include <QVariant>
 #include <QRect>
 
 typedef const char *const StringLiteral;
@@ -40,7 +42,11 @@ const QString _CRLF("\r\n");
 const qreal  MBYTE  = 1024*1024.0;
 const qint32 QT_MAX_UI = 0xffffff;
 
-const QString Q_SETTINGS_GEOMETRY("WindowGeometry");
+const QString SETTINGS_L_SOURCE("LastSourcePath");
+const QString SETTINGS_L_TARGET("LastTargetPath");
+const QString SETTINGS_LVERSION("LastVersionNbr");
+const QString SETTINGS_BUILDOPT("LastBuildOptns");
+const QString SETTINGS_GEOMETRY("WindowGeometry");
 
 #define FOR_CONST_IT(OBJECT)											\
 	for (auto IT = OBJECT.constBegin(); IT != OBJECT.constEnd(); ++IT)	\
@@ -98,8 +104,12 @@ const QString Q_SETTINGS_GEOMETRY("WindowGeometry");
 #define CALL_QUEBLK(...) ____EXPAND(__QCALLBLK_EVAL(____EXPAND(_PP_N_ARG(__VA_ARGS__)))(__VA_ARGS__))
 
 #define META_OBJECT(CLASS)	(##CLASS::staticMetaObject)
+#define META_ENUM(ID)		(metaObject()->enumerator(metaObject()->indexOfEnumerator(#ID)))
 #define CLASS_NAME(CLASS)	 META_OBJECT(##CLASS).className()
 #define MEMBER(NAME)		 #NAME
+#define Q_REGISTRY(KEY)		 QSettings(KEY, QSettings::NativeFormat)
+inline void		Q_SET_SET(const QString &KEY, const QVariant &VAL)				{		 QSettings().setValue(KEY, VAL); }
+inline QVariant Q_SET_GET(const QString &KEY, const QVariant &DEF = QVariant()) { return QSettings().	value(KEY, DEF); }
 
 template <typename T> T Map(const T &val, const T &minIn, const T &maxIn, const T &minOut, const T &maxOut)
 {

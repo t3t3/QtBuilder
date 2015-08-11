@@ -266,7 +266,7 @@ void SliderProxyStyle::drawComplexControl(ComplexControl ctrl, const QStyleOptio
 	else	 o.setAlignment(Qt::AlignRight|Qt::AlignVCenter);
 
 	p->setPen(Qt::black);
-	p->drawText(r.adjusted(off,0,-off,0), wgt->accessibleName(), o);
+	p->drawText(r.adjusted(off,0,-off,0), wgt->objectName(), o);
 	p->fillRect(h, high);
 
 	QFont f = p->font();

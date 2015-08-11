@@ -8,6 +8,10 @@ const QString msBuildTool("jom.exe"); // ... or "nmake.exe"
 const QString qtConfigure("configure.exe");
 const QString vcInst("D:/BIZ/MICROSOFT/" ); // TODO: replace by querying the registry!
 
+const QString registryIns("InstallDir");
+const QString registryDig("HKEY_CURRENT_USER\\Software\\Digia\\Versions");
+const QString registryTrl("HKEY_CURRENT_USER\\Software\\Trolltech\\Versions");
+
 const QString vc2010("Visual Studio 2010");
 const QString vc2012("Visual Studio 2012");
 const QString vc2013("Visual Studio 2013");

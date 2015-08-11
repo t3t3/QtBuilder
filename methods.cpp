@@ -431,21 +431,19 @@ bool QtBuilder::filterExt(const QFileInfo &info)
 
 // ~~thread safe (no mutexes!)...
 const QString QtBuilder::targetDir(int msvc, int arch, int type, QString &native, QStringList &t)
-{
-	m_libPath = QDir::cleanPath(m_libPath);
-	//
+{	//
 	//	USER_SET_LIB_PATH	...	something like				"D:\3d-Party\Qt"
 	//	  \VERSION			... currently processed version	i.e. "4.8.7"
 	//	    \TYPE			...	library type:				"shared" or "static"
 	//	      \ARCHITECTURE	... MSVC $(Platform) compatible	"Win32" or "x64"
 	//	        \MSVC_VER	...	MSVC $(PlatformToolset)		"v100" or "v110" or "v120" or "v130"
 	//
-	t.clear();
-	t.append(m_libPath);
+	t = m_libPath.split(SLASH);
 	t.append(m_version);
 	t.append(bPaths[type]);
 	t.append(bPaths[arch]);
 	t.append(bPaths[msvc]);
+	t.removeDuplicates();
 
 	QString target = t.join(SLASH);
 			native = QDir::toNativeSeparators(target);
@@ -472,46 +470,9 @@ const QString QtBuilder::driveLetter()
 }
 
 // ~~thread safe (no mutexes!)...
-bool QtBuilder::qtSettings(QStringList &versions, QString &instDir)
-{
-	if (m_version.isEmpty())
-	{
-		doLog("No Qt version given", Elevated);
-		return false;
-	}
-	versions+= "HKEY_CURRENT_USER\\Software\\Trolltech\\Versions\\%1";
-	versions+= "HKEY_CURRENT_USER\\Software\\Digia\\Versions\\%1";
-	instDir  = "InstallDir";
-	return true;
-}
-
-// ~~thread safe (no mutexes!)...
 void QtBuilder::registerQtVersion()
 {
-	return; // a) not working, b) not useful in particular for having Qt Creator showing the new versions
-
-	QStringList versions;
-	QString version, instDir;
-	if (!qtSettings(versions, instDir))
-		return;
-
-	FOR_CONST_IT(versions)
-	{
-		QString native = QDir::toNativeSeparators(m_target);
-		QString name = QString(m_target).remove(m_libPath+SLASH).replace(SLASH,"-");
-
-		  version = (*IT).arg(name);
-		QSettings s(version);
-		qDebug() << version;
-
-		if (s.isWritable())
-		{	s.setValue(instDir, native);
-			s.sync();
-		if (s.value(instDir).toString() == native)
-			return;
-		}
-		doLog("Couldn't register Qt in:", version+QString(": REG_SZ\"%1\"").arg(instDir), Elevated);
-	}
+	// TODO: make compiled Qt versions(s) available to Qt Creator auto detect...
 }
 
 // thread safe!

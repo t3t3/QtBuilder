@@ -185,11 +185,11 @@ void QtBuilder::createAppOpt(QBoxLayout *lyt)
 	FOR_CONST_IT(m_bopts)
 	{
 		int  enumId = IT.key();
-		QPair<int, int> range = m_range.value(enumId);
+		Range range = m_range.value(enumId);
 
 		QtSlider *qsl = new QtSlider(IT.key(), Warning, Critical, m_opt);
-		qsl->setAccessibleName(enumName(enumId).toUpper());
-		qsl->setRange(range.first, range.second);
+		qsl->setObjectName(enumName(enumId).toUpper());
+		qsl->setRange(range.minimum, range.maximum);
 		qsl->setValue(IT.value());
 		vlt->addWidget(qsl);
 
