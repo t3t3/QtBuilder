@@ -28,7 +28,7 @@
 #include <QApplication>
 #include <QUuid>
 
-const bool qtBuilderConfigOnly = true;
+const bool qtBuilderConfigOnly = false;
 const bool qtBuilderUseTargets = false;
 
 QtCompile::QtCompile(QtBuilder *main) : QtBuildState(main),

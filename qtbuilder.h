@@ -517,6 +517,7 @@ public:
 	void show();
 	void setupDefaults();
 
+	bool cancelled() const { return m_qtc->cancelled(); }
 	int maxDiskSpace() const;
 
 public slots:

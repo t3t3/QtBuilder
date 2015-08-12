@@ -27,6 +27,8 @@
 #include "Windows.h"
 #endif
 
+const bool qtBuilderTaskKillFirst = true;
+
 QtProcess::QtProcess(QObject *main, bool blockOutput) : QProcess(),
 	m_bld(qobject_cast<QtBuilder *>(main)), m_cancelled(false)
 {
@@ -41,7 +43,8 @@ QtProcess::QtProcess(QObject *main, bool blockOutput) : QProcess(),
 	{	connect(this, SIGNAL(readyReadStandardOutput()),  this, SLOT(checkQuit()));
 		connect(this, SIGNAL(readyReadStandardError()),   this, SLOT(checkQuit()));
 	}
-	connect(m_bld, SIGNAL(cancel()), this, SLOT(cancel()), Qt::QueuedConnection);
+	// on a note: a QProcess wilL NOT receive signals as long the spawned process(es) is/are running, thus this...
+	// connect(m_bld, SIGNAL(cancel()), this, SLOT(cancel()), Qt::QueuedConnection); is usedless!!!
 }
 
 QtProcess::~QtProcess()
@@ -63,37 +66,61 @@ void QtProcess::sendStdErr()
 
 void QtProcess::checkQuit()
 {
-	if (!m_cancelled)
+	if (m_cancelled || !m_bld->cancelled())
 		return;
+
+	m_cancelled = true;
 
 	if (state() != Running)
 	{
 		close();
 		return;
 	}
-	for(int i = 0; i < 5; i++)
+	if (qtBuilderTaskKillFirst)
+	{	//
+		// note: since mose (all?) spawned processes will not ended by the below measures,
+		// "taskkill" is the way to go; since these processes only write the the temp dir
+		// structure any left-over garbage is going to be cleared on the next file sync!!
+		//
+		QProcess prc;
+		qWarning()<<QString("taskkill /F /T /PID %1").arg((int)pid()->dwProcessId);
+		prc.execute(QString("taskkill /F /T /PID %1").arg((int)pid()->dwProcessId));
+		waitForFinished(5000);
+	}
+	if (state() == Running) for(int i = 0; i < 2; i++)
+	{
+		terminate();
+		if (waitForFinished(1500))
+			break;
+	}
+	if (state() == Running) for(int i = 0; i < 3; i++)
 	{
 #ifdef _WIN32
-		GenerateConsoleCtrlEvent(0, (DWORD)pid());
-		GenerateConsoleCtrlEvent(1, (DWORD)pid());
+		GenerateConsoleCtrlEvent(0, pid()->dwProcessId);
+		GenerateConsoleCtrlEvent(1, pid()->dwProcessId);
+		if (waitForFinished(5000))
+			break;
 #endif
-		if (!waitForFinished(500))
-		{
-			closeWriteChannel();
-			closeReadChannel(StandardError);
-			closeReadChannel(StandardOutput);
-		}
-
-		if (!waitForFinished(500)) terminate();
-		if (!waitForFinished(500)) kill();
 	}
 	if (state() == Running)
 	{
-		QProcess p;
-		p.execute(QString("taskkill /PID %1").arg((int)pid()));
+		closeWriteChannel();
+		closeReadChannel(StandardError);
+		closeReadChannel(StandardOutput);
 		waitForFinished(5000);
 	}
-	close();
+	if (state() == Running && !qtBuilderTaskKillFirst)
+	{
+		QProcess prc;
+		qWarning()<<QString("taskkill /F /T /PID %1").arg((int)pid()->dwProcessId);
+		prc.execute(QString("taskkill /F /T /PID %1").arg((int)pid()->dwProcessId));
+		waitForFinished(5000);
+	}
+	if (state() == Running) // note: if none of the above could end the spawned process(es), this is literally the last measure.
+	{
+		kill();
+		waitForFinished(5000);
+	}
 }
 
 
