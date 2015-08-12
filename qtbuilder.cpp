@@ -42,6 +42,7 @@ public:
 	}
 	void set(Modes &modes, int opt, bool def)
 	{
+		def = settings.isEmpty() && def;
 		modes.insert(opt, settings.contains(QString::number(opt)) || def);
 	}
 private:
@@ -52,21 +53,21 @@ void QtBuilder::setupDefaults()
 {
 	int cores = QThread::idealThreadCount();
 	typedef QtBuildState S;
-	QtBuildSettings b;
+	QtBuildSettings B;
 
-	b.set(m_msvcs, MSVC2010,	false);
-	b.set(m_msvcs, MSVC2012,	false);
-	b.set(m_msvcs, MSVC2013,	true );
-	b.set(m_msvcs, MSVC2015,	false);
+	B.set(m_msvcs, MSVC2010,	false);
+	B.set(m_msvcs, MSVC2012,	false);
+	B.set(m_msvcs, MSVC2013,	true );
+	B.set(m_msvcs, MSVC2015,	false);
 
-	b.set(m_types, Shared,		true );
-	b.set(m_types, Static,		true );
+	B.set(m_types, Shared,		true );
+	B.set(m_types, Static,		true );
 
-	b.set(m_archs, X86,			true );
-	b.set(m_archs, X64,			true );
+	B.set(m_archs, X86,			true );
+	B.set(m_archs, X64,			true );
 
-	b.set(m_confs, Debug,		true );
-	b.set(m_confs, Release,		true );
+	B.set(m_confs, Debug,		true );
+	B.set(m_confs, Release,		true );
 
 	m_bopts.insert(S::RamDisk,	 4);
 	m_bopts.insert(S::Cores,	 qMax(cores-1, 1));
@@ -74,10 +75,9 @@ void QtBuilder::setupDefaults()
 	m_range.insert(S::RamDisk,	 Range(3, 10));
 	m_range.insert(S::Cores,	 Range(1, cores));
 
-	QSettings	s;
-	m_version = s.value(SETTINGS_LVERSION, "4.8.7"				).toString();
-	m_source  = s.value(SETTINGS_L_SOURCE, "C:/Qt/4.8.7"		).toString();
-	m_libPath = s.value(SETTINGS_L_TARGET, "C:/Qt/4.8.7/builds"	).toString();
+	m_version = Q_SET_GET(SETTINGS_LVERSION, "4.8.7"			 ).toString();
+	m_source  = Q_SET_GET(SETTINGS_L_SOURCE, "C:/Qt/4.8.7"		 ).toString();
+	m_libPath = Q_SET_GET(SETTINGS_L_TARGET, "C:/Qt/4.8.7/builds").toString();
 
 	m_source  = QDir::cleanPath(m_source);
 	m_libPath = QDir::cleanPath(m_libPath);
@@ -98,6 +98,7 @@ QtBuilder::QtBuilder(QWidget *parent) : QMainWindow(parent),
 	setWindowIcon(QIcon(":/graphics/icon.png"));
 	setWindowTitle(qApp->applicationName());
 
+	checkVsInstalls();
 	setupDefaults();
 	createUi();
 
@@ -129,7 +130,7 @@ void QtBuilder::closeEvent(QCloseEvent *event)
 
 void QtBuilder::end()
 {
-	QSettings().setValue(SETTINGS_GEOMETRY, saveGeometry());
+	Q_SET_SET(SETTINGS_GEOMETRY, saveGeometry());
 	qApp->setProperty("result", (int)m_qtc->state);
 
 	hide();
@@ -138,8 +139,7 @@ void QtBuilder::end()
 
 void QtBuilder::show()
 {
-	QSettings  s;
-	QByteArray g = s.value(SETTINGS_GEOMETRY).toByteArray();
+	QByteArray g = Q_SET_GET(SETTINGS_GEOMETRY).toByteArray();
 	if (!g.isEmpty())
 		 restoreGeometry(g);
 	else setGeometry(centerRect(25));
@@ -166,7 +166,7 @@ void QtBuilder::setup(int option)
 	{
 		for(auto JT=(*IT)->begin();JT!=(*IT)->end();++JT)
 		{	if ( JT.key() == option)
-				*JT = option;
+				*JT = !JT.value();
 			if ( JT.value())
 				opts.append(QString::number(JT.key()));
 		}
@@ -206,10 +206,8 @@ void QtBuilder::process(bool start)
 		}
 
 		bool ok = true;
-		ok &= !m_confs.keys(true).isEmpty();
-		ok &= !m_types.keys(true).isEmpty();
-		ok &= !m_archs.keys(true).isEmpty();
-		ok &= !m_msvcs.keys(true).isEmpty();
+		FOR_CONST_IT(m_opts)
+			 ok&=!(*IT)->keys(true).isEmpty();
 
 		m_qtc->state = ok ? QtBuildState::Started : QtBuildState::NotStarted;
 		if (ok)
@@ -339,6 +337,27 @@ void QtBuilder::setTargetDir(const QString &path, const QString &ver)
 
 	QSettings().setValue(SETTINGS_L_TARGET, native);
 	Q_UNUSED(ver);
+}
+
+void QtBuilder::checkVsInstalls()
+{
+	m_msvcBOpts= vsOpts;
+	QString vsv, vcVars;
+	QStringList  v = Q_REG_CLASSES.childGroups();
+				 v = v.filter(msVisualStd);
+	FOR_CONST_IT(v)
+	{
+		vsv = *IT;
+		vcVars = Q_REG_DEFICON_(vsv).split(msVisualCpp).first()+msVisualCpp+msVcVarsAll;
+
+		if (!QFileInfo(vcVars).exists())
+			continue;
+
+			 if (vsv.endsWith("10.0")) m_msvcBOpts[MSVC2010] = vcVars;
+		else if (vsv.endsWith("11.0")) m_msvcBOpts[MSVC2012] = vcVars;
+		else if (vsv.endsWith("12.0")) m_msvcBOpts[MSVC2013] = vcVars;
+		else if (vsv.endsWith("13.0")) m_msvcBOpts[MSVC2015] = vcVars;
+	}
 }
 
 void QtBuilder::registerQtVersion()

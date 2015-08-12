@@ -25,7 +25,6 @@
 #include "helpers.h"
 
 #include <QApplication>
-#include <QCheckBox>
 //
 // note: most of the checkbox stuff can be considered display dummies;
 // a proper configuration system should...
@@ -125,8 +124,8 @@ void QtBuilder::createCfgOpt(QBoxLayout *lyt)
 	Selections *s = new Selections("CONFIGURATION", Process, centralWidget());
 	s->setDisabled(true);
 
-	s->append(qtBuilderMatchLists(targetSwitches, exclude));
-	s->append(plugins);
+	s->addOpts(qtBuilderMatchLists(targetSwitches, exclude));
+	s->addOpts(plugins);
 
 	s->create();
 	lyt->addWidget(s);
@@ -138,9 +137,9 @@ void QtBuilder::createBldOpt(QBoxLayout *lyt)
 	s->setDisabled(true);
 	s->setSorting(false);
 
-	s->append(qtBuilderMatchLists(globalSwitches,  globals, true));
-	s->append(qtBuilderMatchLists(compileSwitches, switches));
-	s->append(qtBuilderMatchLists(featureSwitches, features));
+	s->addOpts(qtBuilderMatchLists(globalSwitches,  globals, true));
+	s->addOpts(qtBuilderMatchLists(compileSwitches, switches));
+	s->addOpts(qtBuilderMatchLists(featureSwitches, features));
 
 	s->create();
 	lyt->addWidget(s);
@@ -155,7 +154,7 @@ void QtBuilder::createAppOpt(QBoxLayout *lyt)
 		m_sel->addModes(m_confs);
 		m_sel->addModes(m_types);
 		m_sel->addModes(m_archs);
-		m_sel->addModes(m_msvcs);
+		m_sel->addModes(m_msvcs, m_msvcBOpts);
 
 		m_sel->create();
 		lyt->addWidget(m_sel);
@@ -233,18 +232,57 @@ Selections::Selections(const QString &label, int color, QWidget *parent) : QWidg
 	connect(m_mapper, SIGNAL(mapped(const QString &)), this, SLOT(toggled(const QString &)));
 }
 
-void Selections::addModes(const Modes &modes)
+QCheckBox *Selections::add(const QString &option, const QString &toolTip, bool disable)
 {
-	QStringList list;
-	QString m;
+	QString  label;
+	Qt::CheckState state;
+	if (!parseOption(option, label, state))
+		return NULL;
+
+	QCheckBox *chb = new QCheckBox(label, this);
+	chb->setFocusPolicy(Qt::NoFocus);
+	chb->setToolTip(toolTip);
+	chb->setFont(font());
+
+	chb->setDisabled(m_disabled || disable);
+	chb->setTristate(m_triState);
+	chb->setCheckState(state);
+	return chb;
+}
+
+void Selections::addOpts(const QStringList &opts)
+{
+	QList<QCheckBox *> chbs;
+	QCheckBox *chb;
+
+	FOR_IT(opts)
+		if((chb = add(*IT, QString(), false)))
+		   chbs.append(chb);
+	append(chbs);
+}
+
+void Selections::addModes(const Modes &modes, const QStringList &inf)
+{
+	QList<QCheckBox *> chbs;
+	QCheckBox *chb;
+	QString m, toolt;
+
 	FOR_CONST_IT(modes)
 	{
 		m = modeLabels.at(IT.key());
 		if (!IT.value())
 			m.prepend("-no-");
-		list.append(m);
-	}
-	append(list);
+
+		toolt.clear();
+		bool disable = false;
+		if (!inf.isEmpty())
+		{
+			toolt = inf.at(IT.key());
+			disable = toolt.isEmpty();
+		}
+		if ((chb = add(m, toolt, disable)))
+			 chbs.append(chb);
+	} append(chbs);
 }
 
 void Selections::addSpacer()
@@ -261,31 +299,20 @@ void Selections::addSpacer()
 
 void Selections::create()
 {
+	QCheckBox *chb;
+	QString  label;
 	QChar c, p;
+
 	FOR_CONST_IT((*this))
 	{
-		QMap<QString, QCheckBox *> map;
-		QCheckBox *chb;
-		QString label;
+		QMap<QString, QCheckBox*> map;
+		QList<QCheckBox *> list = *IT;
 
-		QStringList list = *IT;
 		FOR_JT(list)
 		{
-			Qt::CheckState state;
-			if (!parseOption(*JT, label, state))
-				continue;
-
-			chb = new QCheckBox(label, this);
-			chb->setFocusPolicy(Qt::NoFocus);
-			chb->setFont(font());
-
-			chb->setDisabled(m_disabled);
-			chb->setTristate(m_triState);
-			chb->setCheckState(state);
-
-
+			chb = *JT;
+			label = chb->text();
 			map.insert(label, chb);
-			*JT = label;
 
 			m_mapper->setMapping(chb, label); // just quick and (very) dirty.
 			connect(chb, SIGNAL(toggled(bool)), m_mapper, SLOT(map()));
@@ -310,10 +337,9 @@ void Selections::create()
 		}
 		else FOR_CONST_JT(list)
 		{
-			m_main->addWidget(map.value(*JT));
+			m_main->addWidget(*JT);
 		}
 	}
-
 	m_main->addItem(new QSpacerItem(0, 0, QSizePolicy::Fixed, QSizePolicy::Expanding));
 }
 

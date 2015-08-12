@@ -45,7 +45,7 @@ const qint32 QT_MAX_UI = 0xffffff;
 const QString SETTINGS_L_SOURCE("LastSourcePath");
 const QString SETTINGS_L_TARGET("LastTargetPath");
 const QString SETTINGS_LVERSION("LastVersionNbr");
-const QString SETTINGS_BUILDOPT("LastBuildOptns");
+const QString SETTINGS_BUILDOPT("LastBldOptions");
 const QString SETTINGS_GEOMETRY("WindowGeometry");
 
 #define FOR_CONST_IT(OBJECT)											\
@@ -107,7 +107,17 @@ const QString SETTINGS_GEOMETRY("WindowGeometry");
 #define META_OBJECT(CLASS)	(##CLASS::staticMetaObject)
 #define CLASS_NAME(CLASS)	 META_OBJECT(##CLASS).className()
 #define MEMBER(NAME)		 #NAME
-#define Q_REGISTRY(KEY)		 QSettings(KEY, QSettings::NativeFormat)
+
+#define WKEY_CLASSES_ROOT	"HKEY_CLASSES_ROOT"
+#define WKEY_CURRENT_USER	"HKEY_CURRENT_USER"
+#define WKEY_LOCAL_MACHINE	"HKEY_LOCAL_MACHINE"
+
+#define Q_REG_DEFICON_(KEY)	 Q_REG_CLASSES_(QString("%1\\DefaultIcon").arg(KEY)).value("Default").toString()
+#define Q_REG_CLASSES_(KEY)	 QSettings(QString(WKEY_CLASSES_ROOT"\\%1").arg(KEY),QSettings::NativeFormat)
+#define Q_REG_CLASSES		 QSettings(WKEY_CLASSES_ROOT,	QSettings::NativeFormat)
+#define Q_REG_CURUSER		 QSettings(WKEY_CURRENT_USER,	QSettings::NativeFormat)
+#define Q_REG_MACHINE		 QSettings(WKEY_LOCAL_MACHINE,	QSettings::NativeFormat)
+#define Q_REGISTRY(KEY)		 QSettings(KEY,					QSettings::NativeFormat)
 inline void		Q_SET_SET(const QString &KEY, const QVariant &VAL)				{		 QSettings().setValue(KEY, VAL); }
 inline QVariant Q_SET_GET(const QString &KEY, const QVariant &DEF = QVariant()) { return QSettings().	value(KEY, DEF); }
 

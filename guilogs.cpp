@@ -101,6 +101,7 @@ void QtAppLog::add(const QString &msg, const QString &text, int type)
 {
 	QString ts = QDateTime::currentDateTime().toString(Qt::ISODate);
 	QString message = msg;
+	ts.replace("T", ", ");
 
 	m_timestamp.append(ts);
 	m_message.append(message);

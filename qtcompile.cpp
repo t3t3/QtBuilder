@@ -53,6 +53,8 @@ void QtCompile::sync()
 	m_source	= b->m_source;
 	m_version	= b->m_version;
 	m_libPath	= b->m_libPath;
+
+	m_msvcBOpts = b->m_msvcBOpts;
 }
 
 void QtCompile::loop()
@@ -137,8 +139,8 @@ bool QtCompile::createTemp()
 	if (!QDir(m_build).entryList(QDir::NoDotAndDotDot).isEmpty())
 		log("Build folder not empty", "Existing content might get overwritten!", Warning);
 
-	m_btemp = m_drive+SLASH+btemp;
-	m_build = m_drive+SLASH+build;
+	m_btemp = m_drive+SLASH+qtBuildTemp;
+	m_build = m_drive+SLASH+qtBuildMain;
 
 	if (!QDir(m_btemp).exists() && !QDir().mkpath(m_btemp))
 	{
@@ -311,17 +313,8 @@ bool QtCompile::prepare(int msvc, int type, int arch)
 		}
 	}
 
-	QString vcVars;
-	{		vcVars = builds.at(msvc)+"/VC/vcvarsall.bat";
-
-		if (!QFileInfo(vcVars).exists())
-		{
-			log("Missing Visual Studio:", QDir::toNativeSeparators(vcVars), Critical);
-			return false;
-		}
-		vcVars = QDir::toNativeSeparators(
-			QString("call \"%1\" %2").arg(vcVars).arg(builds.at(arch)));
-	}
+	QString vcVars = QDir::toNativeSeparators(QString("call \"%1\" %2")
+			.arg(m_msvcBOpts.at(msvc)).arg(m_msvcBOpts.at(arch)));
 
 	bool result = true;
 	if(!(result = setEnvironment(vcVars, makeSpec)))
@@ -437,7 +430,7 @@ bool QtCompile::finalize()
 	QString text = QString("<b>Time ... %1:%2 minutes ... %3 MB max. used temp disk space</b>");
 	uint secs = elapsed()/1000;
 	uint mins = qFloor(secs/60);
-	text = text.arg(mins).arg(secs%qMax(1U,mins),2,10,FILLNUL).arg(mbts);
+	text = text.arg(mins).arg(secs%60,2,10,FILLNUL).arg(mbts);
 
 	log("Qt build done", text.toUpper(), Elevated);
 
@@ -468,13 +461,16 @@ void QtCompile::checkOptions(QStringList &opts)
 	while(it != opts.end())
 	{
 		opt = *it;
-		if (opt.startsWith("-nomake")) // ... apparently "-nomake X" options are not validated by configure!
+		if (opt.startsWith("-nomake")) // apparently "-nomake X" options are not validated by configure (and not contained in the help anyway)!
+		{
+			++it;
 			continue;
+		}
 
 		o = opt.split("-");
 		QString test;
 
-		int count = qMin(o.count(), 2); // ... several options are variable, but at least the 1st 2 parts of the option string is static (is it?)
+		int count = qMin(o.count(), 2); // several options are variable, but at least the 1st 2 parts of the option string is static (is it??)
 		for(int i = 0; i < count; i++)
 			test += o.at(i);
 
@@ -521,10 +517,10 @@ bool QtCompile::setEnvironment(const QString &vcVars, const QString &mkSpec)
 			parts = value.split(";");
 			parts.removeDuplicates();
 			FOR_CONST_JT(parts)
-			   if (!(*JT).contains(vc2010, Qt::CaseInsensitive) &&
-				   !(*JT).contains(vc2012, Qt::CaseInsensitive) &&
-				   !(*JT).contains(vc2013, Qt::CaseInsensitive) &&
-				   !(*JT).contains(vc2015, Qt::CaseInsensitive))
+			   if (!(*JT).contains(m_msvcBOpts.at(MSVC2010), Qt::CaseInsensitive) &&
+				   !(*JT).contains(m_msvcBOpts.at(MSVC2012), Qt::CaseInsensitive) &&
+				   !(*JT).contains(m_msvcBOpts.at(MSVC2013), Qt::CaseInsensitive) &&
+				   !(*JT).contains(m_msvcBOpts.at(MSVC2015), Qt::CaseInsensitive))
 					lines +=  (*JT);
 			value = lines.join(";");
 		}
@@ -644,7 +640,7 @@ void QtCompile::writeQtVars(const QString &path, const QString &vcVars, int msvc
 	var += QString("devenv /useenv\r\n"								);
 	var += QString(":ENDVSSTART\r\n"								);
 
-	writeTextFile(path+qtVar, var);
+	writeTextFile(path+qtVarScript, var);
 }
 
 bool QtCompile::writeTextFile(const QString &filePath, const QString &text)

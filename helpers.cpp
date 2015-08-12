@@ -54,15 +54,18 @@ const QRect centerRect(int percentOfScreen, int screenNbr)
 bool getDiskSpace(const QString &anyPath, uint &totalMb, uint &freeMb)
 {
 #ifdef _WIN32
+	SetErrorMode(SEM_FAILCRITICALERRORS);
 	ULARGE_INTEGER free,total;
-	if (!GetDiskFreeSpaceExA(
-		 QString(anyPath.left(2)+"\\").toUtf8().constData(), &free, &total, 0))
-		return false;
+	if (GetDiskFreeSpaceExA(
+		QString(anyPath.left(2)+"\\").toUtf8().constData(), &free, &total, 0))
+	{
+		quint64 MB = quint64(1024*1024);
+		freeMb	= (uint)(( free.QuadPart) / MB);
+		totalMb = (uint)((total.QuadPart) / MB);
 
-	quint64 MB = quint64(1024*1024);
-	freeMb	= (uint)(( free.QuadPart) / MB);
-	totalMb = (uint)((total.QuadPart) / MB);
-	return true;
+		SetErrorMode(0);
+		return true;
+	}
 #endif
 	return false;
 }

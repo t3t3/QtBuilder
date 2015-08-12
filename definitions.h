@@ -4,19 +4,6 @@
 //
 // user config section...
 //
-const QString msBuildTool("jom.exe"); // ... or "nmake.exe"
-const QString qtConfigure("configure.exe");
-const QString vcInst("D:/BIZ/MICROSOFT/" ); // TODO: replace by querying the registry!
-
-const QString registryIns("InstallDir");
-const QString registryDig("HKEY_CURRENT_USER\\Software\\Digia\\Versions");
-const QString registryTrl("HKEY_CURRENT_USER\\Software\\Trolltech\\Versions");
-
-const QString vc2010("Visual Studio 2010");
-const QString vc2012("Visual Studio 2012");
-const QString vc2013("Visual Studio 2013");
-const QString vc2015("Visual Studio 2015");
-
 const QStringList globals = QStringList()
 	<< "-confirm-license"
 	<< "-opensource"
@@ -42,7 +29,6 @@ const QStringList plugins = QStringList()
 	<< "-qt-style-windowsvista"
 ;
 const QStringList exclude = QStringList()
-	<< "-lala-gaga-nana"
 	<< "-no-accessibility"
 	<< "-no-dbus"
 	<< "-no-declarative"
@@ -61,6 +47,7 @@ const QStringList exclude = QStringList()
 	<< "-nomake examples"
 	<< "-nomake tools"
 	<< "-nomake translations"
+	<< "-unknown-option-test"
 ;
 const QStringList sfilter = QStringList() /* lower case! */
 	<< "/demos"
@@ -94,7 +81,6 @@ const QStringList ffilter = QStringList() /* lower case! */
 const QStringList cfilter = QStringList() /* lower case! */
 	<< "c"
 	<< "cpp"
-	<< "prl"
 ;
 const QStringList targets = QStringList() /* used if the according global bool is set */
 	<< "sub-tools-bootstrap"
@@ -144,12 +130,6 @@ enum Mode
 	Debug	 =  8,
 	Release	 =  9,
 };
-
-const QString vc2010Inst(vcInst+vc2010); // TODO: replace by querying the registry!
-const QString vc2012Inst(vcInst+vc2012);
-const QString vc2013Inst(vcInst+vc2013);
-const QString vc2015Inst(vcInst+vc2015);
-
 const QStringList modeLabels = QStringList()
 	<< "Windows (Win32)"
 	<< "Windows (x64)"
@@ -174,18 +154,18 @@ const QStringList bPaths = QStringList()
 	<< ""
 	<< ""
 ;
-const QStringList builds = QStringList()
+const QStringList vsOpts = QStringList()
 	<< "x86"
 	<< "amd64"
-	<< vc2010Inst
-	<< vc2012Inst
-	<< vc2013Inst
-	<< vc2015Inst
 	<< ""
 	<< ""
 	<< ""
 	<< ""
-;
+	<< ""
+	<< ""
+	<< ""
+	<< ""
+;	// ... technically all msvc options could be created dynamically; in case of severe naming changes it'd be better to keep it static.
 const QStringList qMakeS = QStringList()
 	<< ""
 	<< ""
@@ -228,13 +208,23 @@ enum MessageType
 	Informal,
 };
 
-const QString btemp("_btmp");
-const QString build("_build");
-const QString qtVar("/bin/qtvars.bat");
-const QString imdiskLetter("Drive letter:");
-const QString imdiskSizeSt("Size:");
-const int imdiskUnit = 16841 ;
-const int defGuiHeight = 28;
+const QString msBuildTool("jom.exe"); // ... or "nmake.exe"
+const QString qtConfigure("configure.exe");
+const QString msVcVarsAll("vcvarsall.bat");
+const QString msVisualCpp("\\VC\\");
+const QRegExp msVisualStd("^VisualStudio\\.Launcher\\.vcxproj\\.(\\d+)\\.(\\d+)$");
+
+const QString registryIns("InstallDir");
+const QString registryDig("HKEY_CURRENT_USER\\Software\\Digia\\Versions");
+const QString registryTrl("HKEY_CURRENT_USER\\Software\\Trolltech\\Versions");
+
+const QString qtBuildTemp("_btmp");
+const QString qtBuildMain("_build");
+const QString qtVarScript("/bin/qtvars.bat");
+const QString imdiskDrive("Drive letter:");
+const QString imdiskSizeS("Size:");
+const int imdiskUnit = 16841;
+const int defGuiHeight = 28 ;
 
 const QStringList globalSwitches = QStringList()
 	<< "-opensource"

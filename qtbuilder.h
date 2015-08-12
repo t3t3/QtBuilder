@@ -31,6 +31,7 @@
 #include <QProgressBar>
 #include <QTextBrowser>
 #include <QTextEdit>
+#include <QCheckBox>
 #include <QSlider>
 #include <QLabel>
 #include <QMenu>
@@ -179,7 +180,7 @@ public slots:
 	void progress(int count, const QString &file, qreal mbs);
 };
 
-class Selections : public QWidget, public QList<QStringList>
+class Selections : public QWidget, public QList<QList<QCheckBox *> >
 {
 	Q_OBJECT
 
@@ -195,7 +196,8 @@ public:
 	inline void setAutoSplit(bool on) {  m_autoSplit = on; }
 	inline void setTriState	(bool on) {  m_triState  = on; }
 
-	void addModes(const Modes &modes);
+	void addModes(const Modes &modes, const QStringList &inf = QStringList());
+	void addOpts(const QStringList &opts);
 	void create();
 
 public slots:
@@ -206,6 +208,7 @@ protected slots:
 	void toggled(const QString &name);
 
 protected:
+	QCheckBox *add(const QString &option, const QString &toolTip, bool disable);
 	bool parseOption(const QString &opt, QString &label, Qt::CheckState &state);
 	bool nextCharUppper(const QChar &c) const;
 	void addSpacer();
@@ -367,6 +370,7 @@ protected:
 	QString m_libPath;
 
 	QMap<int, int>	m_bopts;
+	QStringList m_msvcBOpts;
 	QStringList m_dirFilter;
 	QStringList m_extFilter;
 };
@@ -544,6 +548,7 @@ protected:
 	void createAppOpt(QBoxLayout * lyt);
 
 	void endProcess();
+	void checkVsInstalls();
 	void registerQtVersion();
 
 	void closeEvent(QCloseEvent *event);

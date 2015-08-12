@@ -370,12 +370,12 @@ bool QtCompile::attachImdisk(QString &letter)
 	{
 		InlineProcess p(this, "imdisk.exe", QString("-l -u %1").arg(m_imdiskUnit), true);
 		QString inf = p.stdOut();
-		if (inf.contains(imdiskLetter))
+		if (inf.contains(imdiskDrive))
 		{	//
 			// TODO: in this case it would also be needed to extend the disk if needed
 			//
-			letter	 = getValueFrom(inf, imdiskLetter, ___LF);
-			int size = getValueFrom(inf, imdiskSizeSt, " ").toULongLong() /1024 /1024 /1024;
+			letter	 = getValueFrom(inf, imdiskDrive, ___LF);
+			int size = getValueFrom(inf, imdiskSizeS, " ").toULongLong() /1024 /1024 /1024;
 			log("Using existing RAM disk", QString("Drive letter %1, %2GB").arg(letter).arg(size));
 
 			m_keepDisk = true;
