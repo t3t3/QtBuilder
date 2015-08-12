@@ -348,9 +348,9 @@ void QtBuilder::checkVsInstalls()
 	FOR_CONST_IT(v)
 	{
 		vsv = *IT;
-		vcVars = Q_REG_DEFICON_(vsv).split(msVisualCpp).first()+msVisualCpp+msVcVarsAll;
+		vcVars = Q_REG_DEFICON_(vsv).split(msVisualCpp).first();
 
-		if (!QFileInfo(vcVars).exists())
+		if (!QFileInfo(vcVars+msVisualCpp+msVcVarsAll).exists())
 			continue;
 
 			 if (vsv.endsWith("10.0")) m_msvcBOpts[MSVC2010] = vcVars;

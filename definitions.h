@@ -47,7 +47,6 @@ const QStringList exclude = QStringList()
 	<< "-nomake examples"
 	<< "-nomake tools"
 	<< "-nomake translations"
-	<< "-unknown-option-test"
 ;
 const QStringList sfilter = QStringList() /* lower case! */
 	<< "/demos"

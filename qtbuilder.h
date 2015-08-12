@@ -486,6 +486,7 @@ protected:
 	bool removeDir(const QString &dirPath, const QStringList &inc = QStringList());
 	bool filterDir(const QString &dirPath, bool isRoot);
 	bool filterExt(const QFileInfo &info);
+	bool filterPath(const QString &eLine);
 
 	const QString logFile(const QString &path) const;
 	const QString driveLetter();

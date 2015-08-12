@@ -152,7 +152,7 @@ int QtCompile::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 				mb +=src.size()/MBYTE;
 				quint64 e = elapsed();
 
-				if (e && !((e)%10))
+				if (e && !((e)%15))
 					emit progress(count, nat, mb*1000/e);
 			}
 

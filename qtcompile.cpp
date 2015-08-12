@@ -28,7 +28,7 @@
 #include <QApplication>
 #include <QUuid>
 
-const bool qtBuilderConfigOnly = false;
+const bool qtBuilderConfigOnly = true;
 const bool qtBuilderUseTargets = false;
 
 QtCompile::QtCompile(QtBuilder *main) : QtBuildState(main),
@@ -314,7 +314,7 @@ bool QtCompile::prepare(int msvc, int type, int arch)
 	}
 
 	QString vcVars = QDir::toNativeSeparators(QString("call \"%1\" %2")
-			.arg(m_msvcBOpts.at(msvc)).arg(m_msvcBOpts.at(arch)));
+		.arg(m_msvcBOpts.at(msvc)+msVisualCpp+msVcVarsAll).arg(m_msvcBOpts.at(arch)));
 
 	bool result = true;
 	if(!(result = setEnvironment(vcVars, makeSpec)))
@@ -517,10 +517,7 @@ bool QtCompile::setEnvironment(const QString &vcVars, const QString &mkSpec)
 			parts = value.split(";");
 			parts.removeDuplicates();
 			FOR_CONST_JT(parts)
-			   if (!(*JT).contains(m_msvcBOpts.at(MSVC2010), Qt::CaseInsensitive) &&
-				   !(*JT).contains(m_msvcBOpts.at(MSVC2012), Qt::CaseInsensitive) &&
-				   !(*JT).contains(m_msvcBOpts.at(MSVC2013), Qt::CaseInsensitive) &&
-				   !(*JT).contains(m_msvcBOpts.at(MSVC2015), Qt::CaseInsensitive))
+				if(!filterPath(*JT))
 					lines +=  (*JT);
 			value = lines.join(";");
 		}
@@ -611,6 +608,14 @@ bool QtCompile::setEnvironment(const QString &vcVars, const QString &mkSpec)
 		m_env.insert("QMAKESPEC", tgtNat+"\\mkspecs\\"+mkSpec);
 	}
 	return true;
+}
+
+bool QtCompile::filterPath(const QString &eLine)
+{
+	FOR_CONST_IT(m_msvcBOpts)
+		if (!(*IT).isEmpty() && eLine.startsWith(*IT))
+			return true;
+	return	false;
 }
 
 void QtCompile::writeQtVars(const QString &path, const QString &vcVars, int msvc)
