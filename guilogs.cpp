@@ -57,6 +57,7 @@ const QString QtAppLog::logFile()
 	if (	m_logFile.isEmpty())
 			m_logFile = qApp->applicationDirPath()+SLASH+qApp->applicationName()+".log";
 	return	m_logFile;
+
 }
 
 const QString QtAppLog::clean(QString text, bool extended)

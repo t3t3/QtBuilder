@@ -81,11 +81,12 @@ void QtBuilder::createUi()
 	m_tmp = new DiskSpaceBar(wgt, Process,  "Build ");
 	m_tgt = new DiskSpaceBar(wgt, Elevated, "Target");
 
-	connect(this, SIGNAL(log(const QString &, const QString&,int)),	m_log, SLOT(add(const QString &, const QString&,int)),	Qt::BlockingQueuedConnection);
-	connect(this, SIGNAL(log(const QString &, int)),				m_log, SLOT(add(const QString &, int)),					Qt::BlockingQueuedConnection);
-	connect(this, SIGNAL(progress(int, const QString &, qreal)),	m_cpy, SLOT(progress(int, const QString &, qreal)),		Qt::QueuedConnection);
-	connect(this, SIGNAL(progress(int, const QString &, qreal)),	m_tmp, SLOT(refresh()),									Qt::QueuedConnection);
-	connect(this, SIGNAL(progress(int, const QString &, qreal)),	m_tgt, SLOT(refresh()),									Qt::QueuedConnection);
+	connect(m_qtc, SIGNAL(log(const QString &, const QString&,int)), m_log, SLOT(add(const QString &, const QString&,int)),	Qt::BlockingQueuedConnection);
+	connect(m_qtc, SIGNAL(log(const QString &, int)),				 m_log, SLOT(add(const QString &, int)),				Qt::BlockingQueuedConnection);
+	connect(m_qtc, SIGNAL(progress(int, const QString &, qreal)),	 m_cpy, SLOT(progress(int, const QString &, qreal)),	Qt::QueuedConnection);
+	connect(m_qtc, SIGNAL(progress(int, const QString &, qreal)),	 m_tgt, SLOT(refresh()),								Qt::QueuedConnection);
+	connect(m_qtc, SIGNAL(progress(int, const QString &, qreal)),	 m_tmp, SLOT(refresh()),								Qt::QueuedConnection);
+	connect(m_qtc, SIGNAL(tempDrive(const QString &)),				 m_tmp, SLOT(setDrive(const QString &)),				Qt::QueuedConnection);
 
 	lyt->addWidget(m_log);
 	vlt->addWidget(m_bld);
@@ -159,8 +160,8 @@ void QtBuilder::createAppOpt(QBoxLayout *lyt)
 		m_sel->create();
 		lyt->addWidget(m_sel);
 
-		connect(m_sel,	SIGNAL(selected(int)),			 this, SLOT(setup(int)));
-		connect(this,	SIGNAL(current(const Modes &)), m_sel, SLOT(activate(const Modes &)), Qt::QueuedConnection);
+		connect(m_sel, SIGNAL(selected(int)),			this, SLOT(setup(int)));
+		connect(m_qtc, SIGNAL(current(const Modes &)), m_sel, SLOT(activate(const Modes &)), Qt::QueuedConnection);
 	}
 	QVBoxLayout *vlt;
 	{
@@ -175,20 +176,20 @@ void QtBuilder::createAppOpt(QBoxLayout *lyt)
 	{	sel = new DirSelect(m_source, Source, Warning, m_opt);
 		vlt->addWidget(sel);
 
-		connect(sel, SIGNAL(dirSelected(const QString &, const QString &)), this, SLOT(sourceDir(const QString &, const QString &)));
+		connect(sel, SIGNAL(dirSelected(const QString &, const QString &)), this, SLOT(setSourceDir(const QString &, const QString &)));
 
 		sel = new DirSelect(m_libPath, Target, Warning, m_opt);
 		vlt->addWidget(sel);
 
-		connect(sel, SIGNAL(dirSelected(const QString &, const QString &)), this, SLOT(tgtLibDir(const QString &, const QString &)));
+		connect(sel, SIGNAL(dirSelected(const QString &, const QString &)), this, SLOT(setTargetDir(const QString &, const QString &)));
 	}
 	FOR_CONST_IT(m_bopts)
 	{
-		int  enumId = IT.key();
-		Range range = m_range.value(enumId);
+		int  option = IT.key();
+		Range range = m_range.value(option);
 
 		QtSlider *qsl = new QtSlider(IT.key(), Warning, Critical, m_opt);
-		qsl->setObjectName(enumName(enumId).toUpper());
+		qsl->setObjectName(m_qtc->optName(option).toUpper());
 		qsl->setRange(range.minimum, range.maximum);
 		qsl->setValue(IT.value());
 		vlt->addWidget(qsl);

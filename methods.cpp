@@ -30,32 +30,8 @@
 #include <QThreadPool>
 
 const QString qtBuilderStaticDrive = "";//Y";	// ... use an existing drive letter; the ram disk part is skipped when set to anything else but ""; left-over build garbage will not get removed!
-const QString qtBuilderHelpCnv("qhelpconverter");
-const QString qtBuilderCoreLib("corelib");
 
-// thread safe!
-void QtBuilder::diskOp(int to, bool start, int count)
-{
-	if (start)
-	{
-		switch(to)
-		{
-		case Build:  CALL_QUEBLK(m_tgt, hide); break;
-		case Target: CALL_QUEBLK(m_tmp, hide); break;
-		}
-
-		CALL_QUEBLK(m_cpy, setMaximum, (int, count));
-	}
-	else
-	{
-		CALL_QUEBLK(m_cpy, hide);
-		CALL_QUEBLK(m_tmp, show);
-		CALL_QUEBLK(m_tgt, show);
-	}
-}
-
-// thread safe!
-void QtBuilder::clearPath(const QString &dirPath)
+void QtCompile::clearPath(const QString &dirPath)
 {
 	QDir dir(dirPath);
 	if (!dir.exists(dirPath))
@@ -66,8 +42,7 @@ void QtBuilder::clearPath(const QString &dirPath)
 		QFile((*IT).absoluteFilePath()).remove();
 }
 
-// thread safe!
-bool QtBuilder::removeDir(const QString &dirPath, const QStringList &inc)
+bool QtCompile::removeDir(const QString &dirPath, const QStringList &inc)
 {
 	bool result = true;
 	QDir dir(dirPath);
@@ -96,8 +71,7 @@ bool QtBuilder::removeDir(const QString &dirPath, const QStringList &inc)
 	return result && dir.rmdir(dirPath);
 }
 
-// ~~thread safe (no mutexes!)...
-int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
+int QtCompile::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 {
 	int count;
 	QString source, target;
@@ -119,7 +93,9 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 	QDir srcDir, desDir;
 	QFileInfo src, des;
 
-	qreal mb = 0;
+	qreal  mb = 0;
+	int level = 0;
+
 	start();
 
 	while(!queue.isEmpty())
@@ -127,16 +103,17 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 		if (cancelled())
 			goto end;
 
+		level--;
 		pair = queue.dequeue();
 		srcDir = pair.first;
 		desDir = pair.second;
 
-		if (filterDir(srcDir.absolutePath()))
+		if (filterDir(srcDir.absolutePath(), level >= 0))
 		{
 			if (synchronize && desDir.exists() &&
 			   !removeDir(desDir.absolutePath()))
 			{
-				doLog("Synchronize faild; couldn't remove:",
+				log("Synchronize faild; couldn't remove:",
 					QDir::toNativeSeparators(desDir.absolutePath()), Elevated);
 				goto error;
 			}
@@ -168,7 +145,7 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 
 			if (tgt.length() > 256)
 			{
-				doLog("Path length exceeded", nat, Elevated);
+				log("Path length exceeded", nat, Elevated);
 				goto error;
 			}
 			{	count++;
@@ -190,12 +167,12 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 			}
 			else if (exists && !QFile(tgt).remove())
 			{
-				doLog("Couldn't replace old file:", nat, Elevated);
+				log("Couldn't replace old file:", nat, Elevated);
 				goto error;
 			}
 			else if (!QFile::copy(src.absoluteFilePath(), tgt))
 			{
-				doLog("Couldn't copy new file:", nat, Elevated);
+				log("Couldn't copy new file:", nat, Elevated);
 				goto error;
 			}
 			else if (synchronize)
@@ -216,7 +193,7 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 				if (!compare.contains(des.fileName()) &&
 					!QFile(des.absoluteFilePath()).remove())
 				{
-					doLog("Synchronize failed; couldn't remove:",
+					log("Synchronize failed; couldn't remove:",
 						QDir::toNativeSeparators(des.absoluteFilePath()), Elevated);
 					goto error;
 				}
@@ -239,6 +216,10 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 			if (synchronize)
 				compare.append(nme);
 		}
+		if (level == -1)
+			level  = sinfo.count();
+		if (level ==  0)
+			level  = -1;
 
 		if (synchronize)
 		{
@@ -252,7 +233,7 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 				if (!compare.contains(des.fileName()) &&
 					!removeDir(des.absoluteFilePath()))
 				{
-					doLog("Synchronize failed; couldn't remove:",
+					log("Synchronize failed; couldn't remove:",
 						QDir::toNativeSeparators(des.absoluteFilePath()), Elevated);
 					goto error;
 				}
@@ -268,14 +249,34 @@ int QtBuilder::copyFolder(int fr, int to, bool synchronize, bool skipRootFiles)
 	return count;
 }
 
-// ~~thread safe (no mutexes!)...
-bool QtBuilder::checkDir(int which)
+bool QtCompile::filterDir(const QString &dirPath, bool isRoot)
+{
+	bool skip = false;
+	FOR_CONST_IT(m_dirFilter)
+	{
+		if (!isRoot && (*IT).startsWith(SLASH))
+		{
+		//	qDebug()<<dirPath;
+			continue;
+		}
+
+		if ((skip = dirPath.endsWith(*IT)))
+			break;
+	}
+	return	skip;
+}
+
+bool QtCompile::filterExt(const QFileInfo &info)
+{
+	return m_extFilter.contains(info.suffix().toLower());
+}
+
+bool QtCompile::checkDir(int which)
 {
 	return checkDir(which, QString());
 }
 
-// ~~thread safe (no mutexes!)...
-bool QtBuilder::checkDir(int which, QString &path)
+bool QtCompile::checkDir(int which, QString &path)
 {
 	int result = Critical;
 	QString name;
@@ -306,12 +307,11 @@ bool QtBuilder::checkDir(int which, QString &path)
 	}
 	if (QDir(path).exists())
 			result  = Informal;
-	else	doLog(QString("%1 removed").arg(name), QDir::toNativeSeparators(path), result);
+	else	log(QString("%1 removed").arg(name), QDir::toNativeSeparators(path), result);
 	return	result != Critical;
 }
 
-// ~~thread safe (no mutexes!)...
-bool QtBuilder::checkDir(int which, QString &path, int &count, bool skipRootFiles)
+bool QtCompile::checkDir(int which, QString &path, int &count, bool skipRootFiles)
 {
 	count = 0;
 	if (!checkDir(which, path))
@@ -322,12 +322,14 @@ bool QtBuilder::checkDir(int which, QString &path, int &count, bool skipRootFile
 	bool filter =!m_extFilter.isEmpty();
 
 	QFileInfoList files, dirs;
-	QDir dir;
+	int level = 0;
+	QDir  dir;
 
 	while(!queue.isEmpty())
 	{
+		level--;
 		dir = queue.dequeue();
-		if (filterDir(dir.absolutePath()))
+		if (filterDir(dir.absolutePath(), level >= 0))
 			continue;
 
 		files = dir.entryInfoList(QDir::Files);
@@ -342,12 +344,16 @@ bool QtBuilder::checkDir(int which, QString &path, int &count, bool skipRootFile
 		dirs = dir.entryInfoList(QDir::AllDirs|QDir::NoDotAndDotDot);
 		FOR_CONST_IT(dirs)
 			queue.enqueue(QDir((*IT).absoluteFilePath()));
+
+		if (level == -1)
+			level  = dirs.count();
+		if (level ==  0)
+			level  = -1;
 	}
 	return count;
 }
 
-// ~~thread safe (no mutexes!)...
-bool QtBuilder::attachImdisk(QString &letter)
+bool QtCompile::attachImdisk(QString &letter)
 {
 	if (!qtBuilderStaticDrive.isEmpty())
 	{
@@ -370,7 +376,7 @@ bool QtBuilder::attachImdisk(QString &letter)
 			//
 			letter	 = getValueFrom(inf, imdiskLetter, ___LF);
 			int size = getValueFrom(inf, imdiskSizeSt, " ").toULongLong() /1024 /1024 /1024;
-			doLog("Using existing RAM disk", QString("Drive letter %1, %2GB").arg(letter).arg(size));
+			log("Using existing RAM disk", QString("Drive letter %1, %2GB").arg(letter).arg(size));
 
 			m_keepDisk = true;
 			return true;
@@ -382,7 +388,7 @@ bool QtBuilder::attachImdisk(QString &letter)
 	}
 
 	int size = m_bopts.value(RamDisk);
-	doLog("Trying to attach RAM disk", QString("Drive letter %1, %2GB").arg(letter).arg(size));
+	log("Trying to attach RAM disk", QString("Drive letter %1, %2GB").arg(letter).arg(size));
 
 	QString args = QString("-a -m %1: -u %2 -s %3G -o rem -p \"/fs:ntfs /q /y\"");
 	args  = args.arg(letter).arg(m_imdiskUnit).arg(size);
@@ -391,14 +397,13 @@ bool QtBuilder::attachImdisk(QString &letter)
 	return p.normalExit();
 }
 
-// ~~thread safe (no mutexes!)...
-bool QtBuilder::removeImdisk(bool silent, bool force)
+bool QtCompile::removeImdisk(bool silent, bool force)
 {
 	if (m_keepDisk)
 		return true;
 
 	if (!silent)
-		doLog("Trying to remove RAM disk");
+		log("Trying to remove RAM disk");
 
 	QString args = QString("-%1 -u %2");
 	args  = args.arg(force ? "D" : "d").arg(m_imdiskUnit);
@@ -407,30 +412,7 @@ bool QtBuilder::removeImdisk(bool silent, bool force)
 	return p.normalExit();
 }
 
-// ~~thread safe (no mutexes!)...
-bool QtBuilder::filterDir(const QString &dirPath)
-{
-	QString d = dirPath.toLower();
-	if (d.contains(qtBuilderCoreLib) ||
-		d.contains(qtBuilderHelpCnv))
-		return false;
-
-	QString p = dirPath;
-	bool skip = false;
-	FOR_CONST_IT(m_dirFilter)
-		if ((skip = p.endsWith(*IT)))
-			break;
-	return	skip;
-}
-
-// ~~thread safe (no mutexes!)...
-bool QtBuilder::filterExt(const QFileInfo &info)
-{
-	return m_extFilter.contains(info.suffix().toLower());
-}
-
-// ~~thread safe (no mutexes!)...
-const QString QtBuilder::targetDir(int msvc, int arch, int type, QString &native, QStringList &t)
+const QString QtCompile::targetDir(int msvc, int arch, int type, QString &native, QStringList &t)
 {	//
 	//	USER_SET_LIB_PATH	...	something like				"D:\3d-Party\Qt"
 	//	  \VERSION			... currently processed version	i.e. "4.8.7"
@@ -450,8 +432,7 @@ const QString QtBuilder::targetDir(int msvc, int arch, int type, QString &native
 	return	target;
 }
 
-// ~~thread safe (no mutexes!)...
-const QString QtBuilder::driveLetter()
+const QString QtCompile::driveLetter()
 {
 	QFileInfoList drives = QDir::drives();
 	QStringList aToZ;
@@ -467,44 +448,4 @@ const QString QtBuilder::driveLetter()
 		return QString();
 
 	return aToZ.last();
-}
-
-// ~~thread safe (no mutexes!)...
-void QtBuilder::registerQtVersion()
-{
-	// TODO: make compiled Qt versions(s) available to Qt Creator auto detect...
-}
-
-// thread safe!
-bool QtBuilder::writeTextFile(const QString &filePath, const QString &text)
-{
-	QString native = QDir::toNativeSeparators(filePath);
-	QFile file(filePath);
-	if ( !file.open(QIODevice::WriteOnly) ||
-		 !file.write(text.toUtf8().constData()))
-	{
-		doLog("Couldn't write file", native, Elevated);
-		file.close();
-		return false;
-	}
-	else
-	{
-		doLog("File created", native);
-		file.close();
-		return true;
-	}
-}
-
-// thread safe!
-void QtBuilder::doLog(const QString &msg, const QString &text, int type)
-{
-	if (QThread::currentThread() == QThreadPool::globalInstance()->thread())
-		m_log->add(msg, text, type);
-	else  emit log(msg, text, type);
-}
-
-// thread safe!
-void QtBuilder::doLog(const QString &msg, int type)
-{
-	doLog(msg, QString(), type);
 }

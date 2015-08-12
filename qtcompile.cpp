@@ -28,15 +28,38 @@
 #include <QApplication>
 #include <QUuid>
 
-const bool qtBuilderConfigOnly = true;
+const bool qtBuilderConfigOnly = false;
 const bool qtBuilderUseTargets = false;
 
-// needs to be called from thread (no mutexes!)...
-void QtBuilder::loop()
+QtCompile::QtCompile(QtBuilder *main) : QtBuildState(main),
+	m_keepDisk(false), m_imdiskUnit(imdiskUnit)
+{
+	connect(main, SIGNAL(cancel()), this, SLOT(cancel()));
+}
+
+void QtCompile::sync()
+{
+	QtBuilder *b;
+	if (!(b = qobject_cast<QtBuilder *>(parent())))
+		return;
+
+	m_confs	= b->m_confs;
+	m_msvcs = b->m_msvcs;
+	m_archs = b->m_archs;
+	m_types = b->m_types;
+	m_bopts = b->m_bopts;
+
+	m_target	= b->m_target;
+	m_source	= b->m_source;
+	m_version	= b->m_version;
+	m_libPath	= b->m_libPath;
+}
+
+void QtCompile::loop()
 {
 	if (!createTemp())
 	{
-		m_state = ErrCreateTemp;
+		state = ErrCreateTemp;
 		return;
 	}
 
@@ -60,44 +83,40 @@ void QtBuilder::loop()
 
 		m[msvc]=m[arch]=m[type]=true;
 		emit current(m);
-
 		m_target.clear();
-		CALL_QUEUED(m_bld, clear);
-		CALL_QUEUED(m_tmp, reset);
 
-		for	  (m_state;
-			   m_state < Finished;
-			   m_state+= 1)
-		switch(m_state)
+		for	  (state;
+			   state < Finished;
+			   state+= 1)
+		switch(state)
 		{
-		case CreateTarget:	if (!createTarget(msvc,type,arch)) m_state+= Error; break;
-		case CopySource:	if (!copySource	 ()				 ) m_state+= Error; break;
-		case Prepare:		if (!prepare	 (msvc,type,arch)) m_state+= Error; break;
-		case ConfClean:		if (!confClean	 ()				 ) m_state+= Error; break;
-		case Configure:		if (!configure	 (msvc,type)	 ) m_state+= Error; break;
-		case Compiling:		if (!compiling	 ()				 ) m_state+= Error; break;
-		case Cleaning:		if (!cleaning	 ()				 ) m_state+= Error; break;
-		case Finalize:		if (!finalize	 ()				 ) m_state+= Error; break;
-		case CopyTarget:	if (!copyTarget	 ()				 ) m_state+= Error; break;
+		case CreateTarget:	if (!createTgt(msvc,type,arch)) state+= Error; break;
+		case CopySource:	if (!copySource	 ()				 ) state+= Error; break;
+		case Prepare:		if (!prepare	 (msvc,type,arch)) state+= Error; break;
+		case ConfClean:		if (!confClean	 ()				 ) state+= Error; break;
+		case Configure:		if (!configure	 (msvc,type)	 ) state+= Error; break;
+		case Compiling:		if (!compiling	 ()				 ) state+= Error; break;
+		case Cleaning:		if (!cleaning	 ()				 ) state+= Error; break;
+		case Finalize:		if (!finalize	 ()				 ) state+= Error; break;
+		case CopyTarget:	if (!copyTarget	 ()				 ) state+= Error; break;
 		default:															 continue;
 		}
 
 		m[msvc]=m[arch]=m[type]=false;
-		if (m_state > Finished)
+		if	(state > Finished)
 			 goto end;
-		else m_state = Started;
+		else state = Started;
 	}
 
 	end:
 	emit current(m);
 	if (!removeTemp())
-		m_state = ErrRemoveTemp;
+		state = ErrRemoveTemp;
 
-	QMutexLocker locker(&m_mutex); // ... avoid watcher "finished" during close event signal reconnection!
+	QMutexLocker l(&mutex); // ... avoid watcher "finished" during close event signal reconnection!
 }
 
-// needs to be called from thread (no mutexes!)...
-bool QtBuilder::createTemp()
+bool QtCompile::createTemp()
 {
 	log("Build step", "Creating temp infrastructure ...", AppInfo);
 
@@ -131,15 +150,14 @@ bool QtBuilder::createTemp()
 		return false;
 	}
 
-	QFile(m_build+m_bld->logFile()).remove();
+	QFile(logFile(m_build)).remove();
 	clearPath(m_build+"/lib");
 
-	CALL_QUEUED(m_tmp, setDrive, (QString, m_build));
+	emit tempDrive(m_build);
 	return true;
 }
 
-// needs to be called from thread (no mutexes!)...
-bool QtBuilder::removeTemp()
+bool QtCompile::removeTemp()
 {
 	if (m_keepDisk)
 		return true;
@@ -148,8 +166,7 @@ bool QtBuilder::removeTemp()
 	return removeImdisk(false, false);
 }
 
-// needs to be called from thread (no mutexes!)...
-bool QtBuilder::createTarget(int msvc, int type, int arch)
+bool QtCompile::createTgt(int msvc, int type, int arch)
 {
 	QStringList tp;
 	QString bldNat = QDir::toNativeSeparators(m_build);
@@ -202,8 +219,7 @@ bool QtBuilder::createTarget(int msvc, int type, int arch)
 	return true;
 }
 
-// needs to be called from thread (no mutexes!)...
-bool QtBuilder::copySource()
+bool QtCompile::copySource()
 {
 	log("Build step", "Copying source files ...", AppInfo);
 	QString native = QDir::toNativeSeparators(m_build);
@@ -221,8 +237,7 @@ bool QtBuilder::copySource()
 	return count;
 }
 
-// needs to be called from thread (no mutexes!)...
-bool QtBuilder::copyTarget()
+bool QtCompile::copyTarget()
 {
 	log("Build step", "Copying target files ...", AppInfo);
 	QString native = QDir::toNativeSeparators(m_target);
@@ -254,15 +269,14 @@ bool QtBuilder::copyTarget()
 	if(!(count = copyFolder(Build, Target, false, true)))
 		 log("Couldn't copy contents to:", native, Critical);
 
-	QFile(m_build+m_bld->logFile()).copy(m_target+m_bld->logFile());
+	QFile(logFile(m_build)).copy(logFile(m_target));
 	removeDir(m_target+"/%SystemDrive%");
 
 	log("Total files copied:", QString::number(++count));
 	return count;
 }
 
-// needs to be called from thread (no mutexes!)...
-bool QtBuilder::prepare(int msvc, int type, int arch)
+bool QtCompile::prepare(int msvc, int type, int arch)
 {
 	if (!checkDir(Source))
 		return false;
@@ -320,8 +334,7 @@ bool QtBuilder::prepare(int msvc, int type, int arch)
 	return true;
 }
 
-// needs to be called from thread (no mutexes!)...
-bool QtBuilder::confClean()
+bool QtCompile::confClean()
 {
 	if (!QFileInfo(m_build+"/Makefile").exists())
 		return true;
@@ -337,19 +350,19 @@ bool QtBuilder::confClean()
 	// ... seems to be better to not use confclean results, i.e. if the prev. build was messed up.
 }
 
-// needs to be called from thread (no mutexes!)...
-bool QtBuilder::configure(int msvc, int type)
+bool QtCompile::configure(int msvc, int type)
 {
 	log("Build step", QString("Running %1 ...").arg(qtConfigure), AppInfo);
 
-	QStringList c;
+	QStringList  o = globals+switches+features+plugins+exclude;
+	checkOptions(o);
+
+	QStringList  c;
 	FOR_CONST_IT(m_confs)
 		if (IT.value()) c.append(qtOpts.value(IT.key()));
 
 	QString qtConfig =c.join("-and");
-	qtConfig += QString(" %1 %2 %3")
-	   .arg(qtOpts.at(msvc), qtOpts.at(type),
-		   (globals+switches+features+plugins+exclude).join(" "));
+	qtConfig += QString(" %1 %2 %3").arg(qtOpts.at(msvc), qtOpts.at(type), o.join(" "));
 
 	if (false)
 	{	BuildProcess proc(this);
@@ -364,13 +377,12 @@ bool QtBuilder::configure(int msvc, int type)
 	return proc.result();
 }
 
-// needs to be called from thread (no mutexes!)...
-bool QtBuilder::compiling()
+bool QtCompile::compiling()
 {
-	log("Build step", QString("Running %1 ...").arg(msBuildTool), AppInfo);
-
 	if (qtBuilderConfigOnly)
 		return true;
+
+	log("Build step", QString("Running %1 ...").arg(msBuildTool), AppInfo);
 
 	QString args;
 	if (msBuildTool.contains("jom", Qt::CaseInsensitive))
@@ -389,7 +401,7 @@ bool QtBuilder::compiling()
 	//
 	FOR_CONST_IT(targets)
 	{
-		if (m_state == Compiling)
+		if (state == Compiling)
 		{	BuildProcess proc(this);
 			proc.setArgs(args+ *IT);
 			proc.start(msBuildTool);
@@ -400,8 +412,7 @@ bool QtBuilder::compiling()
 	return true;
 }
 
-// needs to be called from thread (no mutexes!)...
-bool QtBuilder::cleaning()
+bool QtCompile::cleaning()
 {
 return true;
 // TODO: check if "clean" is actually needed; since the build folder is now synchronised
@@ -419,24 +430,64 @@ return true;
 	}	return true;
 }
 
-// needs to be called from thread (no mutexes!)...
-bool QtBuilder::finalize()
+bool QtCompile::finalize()
 {
 	QLocale l(QLocale::English);
-	QString mbts = l.toString(m_tmp->maxUsed());
+	QString mbts = l.toString(qobject_cast<QtBuilder *>(parent())->maxDiskSpace());
 	QString text = QString("<b>Time ... %1:%2 minutes ... %3 MB max. used temp disk space</b>");
 	uint secs = elapsed()/1000;
 	uint mins = qFloor(secs/60);
 	text = text.arg(mins).arg(secs%qMax(1U,mins),2,10,FILLNUL).arg(mbts);
+
 	log("Qt build done", text.toUpper(), Elevated);
 
 	QFile(m_target+SLASH+msBuildTool).remove();
-	registerQtVersion();
 	return true;
 }
 
-// needs to be called from thread (no mutexes!)...
-bool QtBuilder::setEnvironment(const QString &vcVars, const QString &mkSpec)
+void QtCompile::checkOptions(QStringList &opts)
+{
+	QString options;
+	{	BuildProcess proc(this, true);
+		proc.setArgs("-help");
+		proc.start(qtConfigure);
+
+		proc.result();
+		options = proc.stdOut();
+	}
+	if (options.isEmpty())
+		return;
+
+	options.append("-confirm-license");
+	// ... at least for 4.x this is not contained in the help output!
+
+	QStringList o;
+	QString opt;
+
+	auto  it  = opts.begin();
+	while(it != opts.end())
+	{
+		opt = *it;
+		if (opt.startsWith("-nomake")) // ... apparently "-nomake X" options are not validated by configure!
+			continue;
+
+		o = opt.split("-");
+		QString test;
+
+		int count = qMin(o.count(), 2); // ... several options are variable, but at least the 1st 2 parts of the option string is static (is it?)
+		for(int i = 0; i < count; i++)
+			test += o.at(i);
+
+		if (!options.contains(test, Qt::CaseInsensitive))
+		{
+			it = opts.erase(it);
+			log("Unknown option removed:", opt, Warning);
+		}
+		else ++it;
+	}
+}
+
+bool QtCompile::setEnvironment(const QString &vcVars, const QString &mkSpec)
 {
 	m_env.clear();
 	//
@@ -566,8 +617,7 @@ bool QtBuilder::setEnvironment(const QString &vcVars, const QString &mkSpec)
 	return true;
 }
 
-// needs to be called from thread (no mutexes!)...
-void QtBuilder::writeQtVars(const QString &path, const QString &vcVars, int msvc)
+void QtCompile::writeQtVars(const QString &path, const QString &vcVars, int msvc)
 {
 	QString nat = QDir::toNativeSeparators(path);
 	QString var;
@@ -595,4 +645,26 @@ void QtBuilder::writeQtVars(const QString &path, const QString &vcVars, int msvc
 	var += QString(":ENDVSSTART\r\n"								);
 
 	writeTextFile(path+qtVar, var);
+}
+
+bool QtCompile::writeTextFile(const QString &filePath, const QString &text)
+{
+	QString native = QDir::toNativeSeparators(filePath);
+	QFile file(filePath);
+	if ( !file.open(QIODevice::WriteOnly) ||
+		 !file.write(text.toUtf8().constData()))
+	{
+		log("Couldn't write file", native, Elevated);
+		return false;
+	}
+	else
+	{
+		log("File created", native);
+		return true;
+	}
+}
+
+const QString QtCompile::logFile(const QString &path) const
+{
+	return path+SLASH+QCoreApplication::applicationName()+".log";
 }

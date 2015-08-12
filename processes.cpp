@@ -27,24 +27,21 @@
 #include "Windows.h"
 #endif
 
-QtProcess::QtProcess(QtBuilder *builder, bool blockOutput) : QProcess(),
-	m_bld(builder), m_cancelled(false)
+QtProcess::QtProcess(QObject *main, bool blockOutput) : QProcess(),
+	m_bld(qobject_cast<QtBuilder *>(main)), m_cancelled(false)
 {
 	if (!m_bld)
 		return;
 
-	setWorkingDirectory(m_bld->targetFolder());
-	QProcessEnvironment e=m_bld->environment();
-	if (!e.isEmpty()) setProcessEnvironment(e);
-
 	if (!blockOutput)
 	{
-		connect(this,	SIGNAL(readyReadStandardOutput()), m_bld, SLOT(procOutput()), Qt::BlockingQueuedConnection);
-		connect(this,	SIGNAL(readyReadStandardError()),  m_bld, SLOT(procError()),  Qt::BlockingQueuedConnection);
+		connect(this, SIGNAL(readyReadStandardOutput()), m_bld, SLOT(procOutput()), Qt::BlockingQueuedConnection);
+		connect(this, SIGNAL(readyReadStandardError()),  m_bld, SLOT(procError()),  Qt::BlockingQueuedConnection);
 	}
-	{	connect(this,	SIGNAL(readyReadStandardOutput()),	this, SLOT(checkQuit()));
-		connect(this,	SIGNAL(readyReadStandardError()),	this, SLOT(checkQuit()));
+	{	connect(this, SIGNAL(readyReadStandardOutput()),  this, SLOT(checkQuit()));
+		connect(this, SIGNAL(readyReadStandardError()),   this, SLOT(checkQuit()));
 	}
+	connect(m_bld, SIGNAL(cancel()), this, SLOT(cancel()), Qt::QueuedConnection);
 }
 
 QtProcess::~QtProcess()
@@ -66,10 +63,9 @@ void QtProcess::sendStdErr()
 
 void QtProcess::checkQuit()
 {
-	if (!m_bld->cancelled())
+	if (!m_cancelled)
 		return;
 
-	m_cancelled = true;
 	if (state() != Running)
 	{
 		close();
@@ -102,11 +98,9 @@ void QtProcess::checkQuit()
 
 
 
-InlineProcess::InlineProcess(QtBuilder *builder, const QString &prog, const QString &args, bool blockOutput) : QtProcess(builder, blockOutput)
+InlineProcess::InlineProcess(QtCompile *compile, const QString &prog, const QString &args, bool blockOutput)
+	: QtProcess(compile->parent(), blockOutput)
 {
-	if (!builder)
-		return;
-
 	setNativeArguments(args);
 	start(prog);
 	waitForFinished(-1);
@@ -118,19 +112,16 @@ InlineProcess::~InlineProcess()
 
 
 
-BuildProcess::BuildProcess(QtBuilder *builder, bool blockOutput) : QtProcess(builder, true)
+BuildProcess::BuildProcess(QtCompile *compile, bool blockOutput) : QtProcess(compile->parent(), true)
 {
-	if (!builder)
-		return;
-
-	setWorkingDirectory(builder->targetFolder());
-	QProcessEnvironment e=builder->environment();
+	setWorkingDirectory(compile->targetFolder());
+	QProcessEnvironment e=compile->environment();
 	if (!e.isEmpty())	setProcessEnvironment(e);
 
 	if (!blockOutput)
 	{
-		connect(this, SIGNAL(readyReadStandardOutput()), builder, SLOT(procLog()),	 Qt::BlockingQueuedConnection);
-		connect(this, SIGNAL(readyReadStandardError()),  builder, SLOT(procError()), Qt::BlockingQueuedConnection);
+		connect(this, SIGNAL(readyReadStandardOutput()), m_bld, SLOT(procLog()),	Qt::BlockingQueuedConnection);
+		connect(this, SIGNAL(readyReadStandardError()),  m_bld, SLOT(procError()),	Qt::BlockingQueuedConnection);
 	}
 }
 

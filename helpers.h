@@ -103,8 +103,8 @@ const QString SETTINGS_GEOMETRY("WindowGeometry");
 #define CALL_QUEUED(...) ____EXPAND(__QCALLQUE_EVAL(____EXPAND(_PP_N_ARG(__VA_ARGS__)))(__VA_ARGS__))
 #define CALL_QUEBLK(...) ____EXPAND(__QCALLBLK_EVAL(____EXPAND(_PP_N_ARG(__VA_ARGS__)))(__VA_ARGS__))
 
+#define META_ENUM(ID)		(staticMetaObject.enumerator(staticMetaObject.indexOfEnumerator(#ID)))
 #define META_OBJECT(CLASS)	(##CLASS::staticMetaObject)
-#define META_ENUM(ID)		(metaObject()->enumerator(metaObject()->indexOfEnumerator(#ID)))
 #define CLASS_NAME(CLASS)	 META_OBJECT(##CLASS).className()
 #define MEMBER(NAME)		 #NAME
 #define Q_REGISTRY(KEY)		 QSettings(KEY, QSettings::NativeFormat)

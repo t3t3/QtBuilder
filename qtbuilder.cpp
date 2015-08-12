@@ -51,32 +51,33 @@ private:
 void QtBuilder::setupDefaults()
 {
 	int cores = QThread::idealThreadCount();
+	typedef QtBuildState S;
 	QtBuildSettings b;
 
-	b.set(m_msvcs, MSVC2010, false);
-	b.set(m_msvcs, MSVC2012, false);
-	b.set(m_msvcs, MSVC2013, true );
-	b.set(m_msvcs, MSVC2015, false);
+	b.set(m_msvcs, MSVC2010,	false);
+	b.set(m_msvcs, MSVC2012,	false);
+	b.set(m_msvcs, MSVC2013,	true );
+	b.set(m_msvcs, MSVC2015,	false);
 
-	b.set(m_types, Shared,	 true );
-	b.set(m_types, Static,	 true );
+	b.set(m_types, Shared,		true );
+	b.set(m_types, Static,		true );
 
-	b.set(m_archs, X86,		 true );
-	b.set(m_archs, X64,		 true );
+	b.set(m_archs, X86,			true );
+	b.set(m_archs, X64,			true );
 
-	b.set(m_confs, Debug,	 true );
-	b.set(m_confs, Release,	 true );
+	b.set(m_confs, Debug,		true );
+	b.set(m_confs, Release,		true );
 
-	m_bopts.insert(RamDisk,	 4);
-	m_bopts.insert(Cores,	 qMax(cores-1, 1));
+	m_bopts.insert(S::RamDisk,	 4);
+	m_bopts.insert(S::Cores,	 qMax(cores-1, 1));
 
-	m_range.insert(RamDisk,	 Range(3, 10));
-	m_range.insert(Cores,	 Range(1, cores));
+	m_range.insert(S::RamDisk,	 Range(3, 10));
+	m_range.insert(S::Cores,	 Range(1, cores));
 
 	QSettings	s;
 	m_version = s.value(SETTINGS_LVERSION, "4.8.7"				).toString();
-	m_source  = s.value(SETTINGS_L_SOURCE, "C:\Qt\4.8.7"		).toString();
-	m_libPath = s.value(SETTINGS_L_TARGET, "C:\Qt\4.8.7\builds"	).toString();
+	m_source  = s.value(SETTINGS_L_SOURCE, "C:/Qt/4.8.7"		).toString();
+	m_libPath = s.value(SETTINGS_L_TARGET, "C:/Qt/4.8.7/builds"	).toString();
 
 	m_source  = QDir::cleanPath(m_source);
 	m_libPath = QDir::cleanPath(m_libPath);
@@ -85,9 +86,9 @@ void QtBuilder::setupDefaults()
 
 
 QtBuilder::QtBuilder(QWidget *parent) : QMainWindow(parent),
-	m_log(NULL), m_cpy(NULL), m_tgt(NULL), m_tmp(NULL), m_keepDisk(false), m_imdiskUnit(imdiskUnit)
+	m_log(NULL), m_cpy(NULL), m_tgt(NULL), m_tmp(NULL)
 {
-	m_state = NotStarted;
+	m_qtc = new QtCompile(this);
 
 	m_opts.append(&m_confs);
 	m_opts.append(&m_archs);
@@ -100,7 +101,9 @@ QtBuilder::QtBuilder(QWidget *parent) : QMainWindow(parent),
 	setupDefaults();
 	createUi();
 
-	connect(&m_loop, SIGNAL(finished()), this, SLOT(processed()));
+	connect(m_qtc,	 SIGNAL(diskOp(int, bool, int)), this, SLOT(diskOp(int,bool,int)),	Qt::BlockingQueuedConnection);
+	connect(m_qtc,	 SIGNAL(current(const Modes &)), this, SLOT(nextBuild()),			Qt::BlockingQueuedConnection);
+	connect(&m_loop, SIGNAL(finished()),			 this, SLOT(processed()));
 }
 
 QtBuilder::~QtBuilder()
@@ -111,9 +114,9 @@ void QtBuilder::closeEvent(QCloseEvent *event)
 {
 	event->setAccepted(false);
 
-	if (working())
+	if (m_qtc->working())
 	{
-		QMutexLocker locker(&m_mutex); // ... avoid watcher "finished" during signal reconnection!
+		QMutexLocker l(&m_qtc->mutex); // ... avoid watcher "finished" during signal reconnection!
 
 		disconnect(&m_loop, 0,					this, 0);
 		   connect(&m_loop, SIGNAL(finished()), this, SLOT(end()));
@@ -127,7 +130,7 @@ void QtBuilder::closeEvent(QCloseEvent *event)
 void QtBuilder::end()
 {
 	QSettings().setValue(SETTINGS_GEOMETRY, saveGeometry());
-	qApp->setProperty("result", (int)m_state);
+	qApp->setProperty("result", (int)m_qtc->state);
 
 	hide();
 	qApp->quit();
@@ -158,8 +161,6 @@ void QtBuilder::option(int opt, int value)
 
 void QtBuilder::setup(int option)
 {
-	QMutexLocker locker(&m_mutex);
-
 	QStringList opts;
 	FOR_IT(m_opts)
 	{
@@ -175,20 +176,16 @@ void QtBuilder::setup(int option)
 
 void QtBuilder::disable(bool disable)
 {
-	m_log->add("Shutting down ...", Warning);
+	if (disable)
+		m_log->add("Shutting down ...", Warning);
+
 	m_opt->setDisabled(disable);
 	m_sel->disable(disable);
 }
 
-void QtBuilder::cancel()
-{
-	m_state = Cancel;
-	emit cancelling();
-}
-
 void QtBuilder::process(bool start)
 {
-	if (working())
+	if (m_qtc->working())
 	{
 		 cancel();
 		disable();
@@ -197,13 +194,13 @@ void QtBuilder::process(bool start)
 	{
 		if (!QFileInfo(m_source+SLASH+qtConfigure).exists())
 		{
-			doLog("Qt sources path mismatch:", QDir::toNativeSeparators(m_source), Warning);
+			log("Qt sources path mismatch:", QDir::toNativeSeparators(m_source), Warning);
 			m_go->setOff();
 			return;
 		}
 		else if (!QDir(m_libPath).exists())
 		{
-			doLog("Build target path mismatch:", QDir::toNativeSeparators(m_target), Warning);
+			log("Build target path mismatch:", QDir::toNativeSeparators(m_target), Warning);
 			m_go->setOff();
 			return;
 		}
@@ -214,11 +211,12 @@ void QtBuilder::process(bool start)
 		ok &= !m_archs.keys(true).isEmpty();
 		ok &= !m_msvcs.keys(true).isEmpty();
 
-		m_state = ok ? Started : NotStarted;
+		m_qtc->state = ok ? QtBuildState::Started : QtBuildState::NotStarted;
 		if (ok)
 		{
-			 m_loop.setFuture(QtConcurrent::run(this, &QtBuilder::loop));
-			 m_opt->setDisabled(true);
+			m_qtc->sync();
+			m_loop.setFuture(QtConcurrent::run(m_qtc, &QtCompile::loop));
+			m_opt->setDisabled(true);
 		}
 		else m_go->setOff();
 	}
@@ -227,15 +225,15 @@ void QtBuilder::process(bool start)
 void QtBuilder::processed()
 {
 	QString msg("QtBuilder ended with:");
-	if (failed())
+	if (m_qtc->failed())
 	{
-		QString errn = PLCHD.arg(m_state,4,10,FILLNUL);
-		QString text = QString("Error %2 (%3)\r\n").arg(errn, lastState());
+		QString errn = PLCHD.arg(m_qtc->state,4,10,FILLNUL);
+		QString text = QString("Error %2 (%3)\r\n").arg(errn, m_qtc->lastState());
 
 		m_bld->endFailure();
 		m_log->add(msg, text.toUpper(), Elevated);
 	}
-	else if (cancelled())
+	else if (m_qtc->cancelled())
 	{
 		m_bld->endFailure();
 		m_log->add("QtBuilder was cancelled.", Warning);
@@ -254,17 +252,17 @@ void QtBuilder::processed()
 void QtBuilder::message()
 {
 	QString msg;
-	if	 (cancelled())	msg = "<b>Process forcefully cancelled!</b>";
-	else if (failed())	msg = "<b>Process ended with errors!</b>";
-	else				msg = "<b>Process sucessfully completed.</b>";
+	if	 (m_qtc->cancelled()) msg = "<b>Process forcefully cancelled!</b>";
+	else if (m_qtc->failed()) msg = "<b>Process ended with errors!</b>";
+	else					  msg = "<b>Process sucessfully completed.</b>";
 
 	QString url("<br/><a href=\"file:///%1\">Open app log file</a>");
 	msg +=  url.arg(QDir::toNativeSeparators(m_log->logFile()));
 
-	if (failed())
+	if (m_qtc->failed())
 	{
 		QString url("<br/><a href=\"file:///%1\">Open last buil log</a>");
-		msg +=  url.arg(QDir::toNativeSeparators(m_build+m_bld->logFile()));
+		msg +=  url.arg(QDir::toNativeSeparators(m_qtc->buildLogFile()));
 	}
 
 	QMessageBox b(this);
@@ -272,11 +270,31 @@ void QtBuilder::message()
 	b.exec();
 }
 
+void QtBuilder::diskOp(int to, bool start, int count)
+{
+	if (start)
+	{
+		switch(to)
+		{
+		case Build:  m_tgt->hide(); break;
+		case Target: m_tmp->hide(); break;
+		}
+
+		m_cpy->setMaximum(count);
+	}
+	else
+	{
+		m_cpy->hide();
+		m_tmp->show();
+		m_tgt->show();
+	}
+}
+
 void QtBuilder::procLog()
 {
 	CALL_QUEUED(m_tmp, refresh);
 	if (QtProcess *p = qobject_cast<QtProcess *>(sender()))
-		m_bld->append(QtAppLog::clean(p->stdOut()),m_build);
+		m_bld->append(QtAppLog::clean(p->stdOut()), p->workingDirectory());
 }
 
 void QtBuilder::procError()
@@ -291,12 +309,16 @@ void QtBuilder::procOutput()
 		m_log->add("Process informal", QtAppLog::clean(p->stdOut(), true), Informal);
 }
 
-void QtBuilder::sourceDir(const QString &path, const QString &ver)
+void QtBuilder::nextBuild()
+{
+	m_bld->clear();
+	m_tmp->reset();
+}
+
+void QtBuilder::setSourceDir(const QString &path, const QString &ver)
 {	//
 	// note: these should be - and usually are - verified!
 	//
-	qDebug()<<path;
-
 	QString native = QDir::toNativeSeparators(path);
 	m_source = path;
 	m_version = ver;
@@ -306,12 +328,10 @@ void QtBuilder::sourceDir(const QString &path, const QString &ver)
 	QSettings().setValue(SETTINGS_LVERSION, m_version);
 }
 
-void QtBuilder::tgtLibDir(const QString &path, const QString &ver)
+void QtBuilder::setTargetDir(const QString &path, const QString &ver)
 {	//
 	// note: this should be - and usually is - verified!
 	//
-	qDebug()<<path;
-
 	QString native = QDir::toNativeSeparators(path);
 	m_libPath = path;
 	m_tgt->setDrive(m_libPath);
@@ -321,12 +341,34 @@ void QtBuilder::tgtLibDir(const QString &path, const QString &ver)
 	Q_UNUSED(ver);
 }
 
-const QString QtBuilder::enumName(int enumId) const
+void QtBuilder::registerQtVersion()
 {
-	return META_ENUM(Options).key(enumId);
+	// TODO: make compiled Qt versions(s) available to Qt Creator auto detect...
 }
 
-const QString QtBuilder::lastState() const
+void QtBuilder::log(const QString &msg, int type)
 {
-	return META_ENUM(States).key(m_state);
+	log(msg, QString(), type);
+}
+
+void QtBuilder::log(const QString &msg, const QString &text, int type)
+{
+	m_log->add(msg, text, type);
+}
+
+int QtBuilder::maxDiskSpace() const
+{
+	return m_tmp ? m_tmp->maxUsed() : 0;
+}
+
+
+
+const QString QtBuildState::optName(int option) const
+{
+	return META_ENUM(Options).key(option);
+}
+
+const QString QtBuildState::lastState() const
+{
+	return META_ENUM(States).key(state);
 }

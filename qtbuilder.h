@@ -92,7 +92,7 @@ public:
 	static const QString clean(QString text, bool extended = false);
 
 public slots:
-	void add(const QString &msg, const QString &text, int type = Informal);
+	void add(const QString &msg, const QString &text, int type);
 	void add(const QString &msg, int type = Informal);
 
 protected:
@@ -349,39 +349,37 @@ public:
 	}
 };
 
-class QtBuilder : public QMainWindow, private QElapsedTimer
+class QtBuilder;
+class QtBuilderBase
 {
-	Q_OBJECT
+public:
+	enum Dirs { Source = 0x1001, Target, Build, Temp };
+
+protected:
+	Modes	m_confs;
+	Modes	m_msvcs;
+	Modes	m_archs;
+	Modes	m_types;
+
+	QString m_target;
+	QString m_source;
+	QString m_version;
+	QString m_libPath;
+
+	QMap<int, int>	m_bopts;
+	QStringList m_dirFilter;
+	QStringList m_extFilter;
+};
+
+class QtBuildState : public QObject, public QElapsedTimer
+{
+	Q_GADGET
 	Q_ENUMS(States)
 	Q_ENUMS(Options)
 
-signals:
-	void log(const QString &msg, const QString &text = QString(), int type = Informal);
-	void log(const QString &msg, int type);
-
-	void progress(int count, const QString &file, qreal mbs);
-	void current(const Modes &modes);
-	void cancelling();
-
 public:
-	explicit QtBuilder(QWidget *parent = 0);
-	virtual ~QtBuilder();
+	QtBuildState(QObject *parent) : QObject(parent) { state = NotStarted; }
 
-	void show();
-	void setupDefaults();
-	void cancel();
-
-	inline const QProcessEnvironment &environment() const { return m_env; }
-	inline const QString &targetFolder() const { return m_target; }
-
-	inline bool ready()		  const { return m_state <  Started;   }
-	inline bool failed()	  const { return m_state  > Cancelled; }
-	inline bool working()	  const { return m_state <  Cancelled && m_state > Started; }
-	inline bool cancelled()	  const { return m_state == Cancelled || m_state == Cancel; }
-	inline int	lastStateId() const { return m_state; }
-	const QString lastState() const;
-
-	enum Options { Cores, RamDisk, };
 	enum States
 	{//	Processing...
 		NotStarted		= -1,
@@ -414,7 +412,107 @@ public:
 		ErrFinalize		= 88,
 		ErrCopyTarget	= 89,
 	};
-	enum Dirs { Source = 0x1001, Target, Build, Temp };
+	enum Options { Cores, RamDisk, };
+
+	QtAtomicInt state;
+	inline bool ready()		  const { return state <  Started;   }
+	inline bool failed()	  const { return state  > Cancelled; }
+	inline bool working()	  const { return state <  Cancelled && state > Started; }
+	inline bool cancelled()	  const { return state == Cancelled || state == Cancel; }
+
+	const QString lastState() const;
+	const QString optName(int option) const;
+};
+
+class QtCompile : public QtBuildState, public QtBuilderBase
+{
+	Q_OBJECT
+
+signals:
+	void current(const Modes &modes);
+	void progress(int count, const QString &file, qreal mbs);
+	void diskOp(int to = -1, bool start = false, int count = 0);
+	void tempDrive(const QString &path);
+
+	void log(const QString &msg, int type);
+	void log(const QString &msg, const QString &text = QString(), int type = Informal);
+
+public:
+	explicit QtCompile(QtBuilder *main);
+
+	inline const QProcessEnvironment &environment() const { return m_env ; }
+	inline const QString buildLogFile() const { return  logFile(m_target); }
+	inline const QString targetFolder() const { return			m_target ; }
+
+	void  sync();
+	void  loop();
+	QMutex mutex;
+
+protected slots:
+	void cancel() { state = Cancel; }
+
+protected:
+	bool removeTemp();
+	bool createTemp();
+	bool createTgt (int msvc, int type, int arch);
+	bool copyTarget();
+	bool copySource();
+
+	bool prepare  (int msvc, int type, int arch);
+	bool confClean();
+	bool configure(int msvc, int type);
+	bool compiling();
+	bool cleaning ();
+	bool finalize ();
+
+	void checkOptions(QStringList &opts);
+	bool setEnvironment(const QString &vcVars, const QString &mkSpec);
+	void writeQtVars(const QString &path, const QString &vcVars, int msvc);
+
+	bool checkDir(int which);
+	bool checkDir(int which, QString &path);
+	bool checkDir(int which, QString &path, int &count, bool skipRootFiles = false);
+
+	bool attachImdisk(QString &letter);
+	bool removeImdisk(bool silent, bool force);
+	bool writeTextFile(const QString &filePath, const QString &text);
+
+	int copyFolder(int fr,  int to, bool synchronize = true, bool skipRootFiles = false);
+	void clearPath(const QString &dirPath);
+	bool removeDir(const QString &dirPath, const QStringList &inc = QStringList());
+	bool filterDir(const QString &dirPath, bool isRoot);
+	bool filterExt(const QFileInfo &info);
+
+	const QString logFile(const QString &path) const;
+	const QString driveLetter();
+	const QString targetDir(int msvc, int arch, int type, QString &native, QStringList &t = QStringList());
+
+private:
+	QProcessEnvironment	m_env;
+	uint m_imdiskUnit;
+	bool m_keepDisk;
+	QString m_drive;
+	QString m_build;
+	QString m_btemp;
+};
+
+class QtBuilder : public QMainWindow, public QtBuilderBase
+{
+	Q_OBJECT
+
+	friend class QtCompile;
+
+signals:
+	void cancel();
+
+public:
+	explicit QtBuilder(QWidget *parent = 0);
+	virtual ~QtBuilder();
+
+	void show();
+	void setupDefaults();
+
+	int maxDiskSpace() const;
 
 public slots:
 	void procOutput();
@@ -432,8 +530,11 @@ protected slots:
 	void option(int opt, int value);
 	void disable(bool disable = true);
 
-	void sourceDir(const QString &path, const QString &ver);
-	void tgtLibDir(const QString &path, const QString &ver);
+	void setSourceDir(const QString &path, const QString &ver);
+	void setTargetDir(const QString &path, const QString &ver);
+
+	void nextBuild();
+	void diskOp(int to, bool start, int count);
 
 protected:
 	void createUi();
@@ -442,85 +543,28 @@ protected:
 	void createBldOpt(QBoxLayout * lyt);
 	void createAppOpt(QBoxLayout * lyt);
 
-	bool removeTemp	 ();
-	bool createTemp	 ();
-	bool createTarget(int msvc, int type, int arch);
-	bool copyTarget	 ();
-	bool copySource	 ();
-
-	bool prepare	 (int msvc, int type, int arch);
-	bool confClean	 ();
-	bool configure	 (int msvc, int type);
-	bool compiling	 ();
-	bool cleaning	 ();
-	bool finalize	 ();
-
-	bool setEnvironment(const QString &vcVars, const QString &mkSpec);
-	void writeQtVars(const QString &path, const QString &vcVars, int msvc);
-	bool writeTextFile(const QString &filePath, const QString &text);
+	void endProcess();
 	void registerQtVersion();
 
-	bool checkDir(int which);
-	bool checkDir(int which, QString &path);
-	bool checkDir(int which, QString &path, int &count, bool skipRootFiles = false);
-
-	void doLog(const QString &msg, const QString &text = QString(), int type = Informal);
-	void doLog(const QString &msg, int type);
-	void diskOp(int to = -1, bool start = false, int count = 0);
-
-	bool attachImdisk(QString &letter);
-	bool removeImdisk(bool silent, bool force);
-
-	void loop();
-	void endProcess();
 	void closeEvent(QCloseEvent *event);
 
-	int copyFolder(int fr,  int to, bool synchronize = true, bool skipRootFiles = false);
-	void clearPath(const QString &dirPath);
-	bool removeDir(const QString &dirPath, const QStringList &inc = QStringList());
-	bool filterDir(const QString &dirPath);
-	bool filterExt(const QFileInfo &info);
-
-	const QString driveLetter();
-	const QString targetDir(int msvc, int arch, int type, QString &native, QStringList &t = QStringList());
-	const QString enumName(int enumId) const;
+	void log(const QString &msg, int type);
+	void log(const QString &msg, const QString &text = QString(), int type = Informal);
 
 private:
 	QFutureWatcher<void> m_loop;
-	QProcessEnvironment	 m_env;
+	QList<Modes *> m_opts;
+	QtCompile *m_qtc;
+
 	CopyProgress *m_cpy;
 	DiskSpaceBar *m_tgt;
 	DiskSpaceBar *m_tmp;
 	Selections *m_sel;
-	QWidget	 *m_opt;
-	QtAppLog *m_log;
 	BuildLog *m_bld;
+	QtAppLog *m_log;
+	QWidget	 *m_opt;
 	QtButton *m_go;
-	QMutex m_mutex;
-
-	QString m_drive;
-	QString m_build;
-	QString m_btemp;
-	QString m_target;
-	QString m_source;
-	QString m_version;
-	QString m_libPath;
-
-	QStringList m_dirFilter;
-	QStringList m_extFilter;
-
-	QMap<int, int> m_bopts;
-	QList<Modes *> m_opts;
-	Ranges	m_range;
-	Modes	m_confs;
-	Modes	m_msvcs;
-	Modes	m_archs;
-	Modes	m_types;
-
-	uint m_imdiskUnit;
-	bool m_keepDisk;
-
-	QtAtomicInt m_state;
+	Ranges m_range;
 };
 
 class QtProcess : public QProcess
@@ -528,7 +572,7 @@ class QtProcess : public QProcess
 	Q_OBJECT
 
 public:
-	explicit QtProcess(QtBuilder *builder, bool blockOutput = false);
+	explicit QtProcess(QObject *main, bool blockOutput = false);
 	virtual ~QtProcess();
 
 	void sendStdOut();
@@ -540,9 +584,10 @@ public:
 	inline bool normalExit() const { return m_cancelled || exitCode() ==  NormalExit; }
 
 protected slots:
+	void cancel() { m_cancelled = true; }
 	void checkQuit();
 
-private:
+protected:
 	QtBuilder *m_bld;
 	bool m_cancelled;
 };
@@ -550,7 +595,7 @@ private:
 class InlineProcess : public QtProcess
 {
 public:
-	explicit InlineProcess(QtBuilder *builder, const QString &prog, const QString &args, bool blockOutput = false);
+	explicit InlineProcess(QtCompile *compile, const QString &prog, const QString &args, bool blockOutput = false);
 	virtual ~InlineProcess();
 
 private:
@@ -560,7 +605,7 @@ private:
 class BuildProcess : public QtProcess
 {
 public:
-	explicit BuildProcess(QtBuilder *builder, bool blockOutput = false);
+	explicit BuildProcess(QtCompile *compile, bool blockOutput = false);
 	virtual ~BuildProcess();
 
 	void setArgs(const QString &args);

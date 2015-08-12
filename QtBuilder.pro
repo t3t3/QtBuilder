@@ -12,15 +12,15 @@ QMAKE_LFLAGS_WINDOWS += \
 
 SOURCES += main.cpp \
 	qtbuilder.cpp \
-	helpers.cpp \
-	guitools.cpp \
-	buildsteps.cpp \
+	qtcompile.cpp \
 	processes.cpp \
-	guimain.cpp \
 	methods.cpp \
-	guiprogress.cpp \
+	helpers.cpp \
+	guimain.cpp \
+	guilogs.cpp \
+	guitools.cpp \
 	guislider.cpp \
-	guilogs.cpp
+	guiprogress.cpp
 
 HEADERS += \
 	qtbuilder.h \
